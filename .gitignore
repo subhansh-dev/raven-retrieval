@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+data/
+*.egg-info/
+dist/
+build/
+.env
+*.pt
+*.bin
+*.h5
+experiments/runs/*/per_query.json
+experiments/runs/*/metadata.json

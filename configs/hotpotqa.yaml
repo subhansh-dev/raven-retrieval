@@ -1,0 +1,31 @@
+# HotpotQA: Multi-hop question answering
+# Expected: RAPTOR + Late Interaction > Hybrid (hierarchical summaries help)
+
+dataset: hotpotqa
+max_queries: 50
+seed: 42
+
+pipelines:
+  - naive_dense
+  - hybrid_rag
+  - hyde
+  - bm25_prf
+
+encoder:
+  model_name: bert-base-uncased
+  projection_dim: 128
+
+chunking:
+  chunk_size: 100
+  chunk_overlap: 20
+
+summarizer:
+  model_name: facebook/bart-large-cnn
+  fallback_to_extractive: true
+
+clustering:
+  soft_threshold: 0.1
+  min_cluster_size: 3
+
+retrieval:
+  top_k: 10
