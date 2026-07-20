@@ -31,23 +31,21 @@
 
 ---
 
-## v0.3.0 — Engineering pass (this release)
+## v0.3.0 — Bug fix pass
 
-v0.3.0 did not re-run the full benchmark (no suitable hardware in scope). It is the **make-it-actually-work** release: 6 critical bugs fixed, 7 logic bugs fixed, and the novel pipeline (RAPTOR + Late Interaction) is now runnable for the first time. The research results are TBD pending a run on capable hardware.
+v0.3.0 fixed 13 bugs (6 critical, 7 logic) and got the RAPTOR + Late Interaction pipeline running for the first time. No full re-run yet — that needs more RAM than was available.
 
-### What changed (affects future numbers)
+### What changed
 
-| Before | After |
-|---|---|
-| HyDE crashed on launch (`model_name` ≠ `embedding_model_name`) | HyDE runs; generator LLM actually loads when `use_llm=True`, template mode logged explicitly otherwise |
-| Late Interaction matched against **[PAD] tokens** (padded to 256) | Attention-mask-trimmed token embeddings — no pad pollution in scoring or pooling |
-| Level-0 RAPTOR clustering used mean-of-ColBERT-tokens (different space than summary levels) | All levels cluster in SBERT space (consistent; the computed-but-discarded SBERT vectors are now used) |
-| Per-query nDCG for significance = all zeros | Real per-query nDCG (numpy, trec_eval-compatible) |
-| Late Chunking / SPLADE encoded one text at a time | Batched encoding (`encode_documents`, `batch_size=`) |
-| BM25+PRF re-scored the full corpus per expansion term (~20 passes/query) | Two-stage PRF: full-corpus first stage, weighted rerank of top-100 candidates only |
-| Index time and query time mixed across pipelines | Reported separately for every pipeline (`timings.json`: `index_s`, `query_s`, `per_query_ms`) |
-| Approximate MaxSim / compression used per-token Python loops (~256x slow) | Vectorized centroid assignment |
-| ReflectionRetriever scored keyword coverage over **doc ID strings** | Scores over real document text (`text_lookup`) |
+- **HyDE**: was crashing on launch (model_name kwarg mismatch) — now runs
+- **Late Interaction**: was matching against [PAD] tokens — now attention-mask-trimmed
+- **RAPTOR clustering**: Level-0 was using ColBERT token means (wrong space) — now uses SBERT consistently
+- **Per-query nDCG**: was silently all zeros (BEIR returns averaged floats, not per-query dict) — now computed in numpy
+- **Encoding**: Late Chunking/SPLADE were encoding one text at a time — now batched
+- **BM25+PRF**: was re-scoring full corpus per expansion term — now two-stage (first pass + rerank top-100)
+- **Timing**: index and query time now reported separately
+- **MaxSim/compression**: were using per-token Python loops — now vectorized
+- **Reflection**: was scoring keyword coverage over doc ID strings — now scores over actual document text
 
 ### Recommended re-run command
 
@@ -64,15 +62,15 @@ python run_enhanced_benchmark.py --dataset scifact --max-queries 100 \
     --colbert-checkpoint checkpoints/final_model.pt
 ```
 
-### Pre-registered expectations (still valid — see experiments/preregistration/template.md)
+### Pre-registered hypotheses
 
-- **H1:** RAPTOR + late interaction (collapsed) > hybrid RAG on nDCG@10 for HotpotQA
-- **H2:** RAPTOR + late interaction > RAPTOR single-vector on nDCG@10
-- **H3:** Late interaction (flat) > naive dense RAG on nDCG@10 *(only with trained projection)*
-- **H4:** RAPTOR + late interaction shows minimal improvement on SciFact (single-hop control)
-- **H5:** Untrained late interaction underperforms dense on SciFact
+- **H1:** RAPTOR + late interaction > hybrid on HotpotQA
+- **H2:** RAPTOR + late interaction > RAPTOR single-vector
+- **H3:** Late interaction > dense (only with trained projection)
+- **H4:** RAPTOR + late interaction ≈ hybrid on SciFact
+- **H5:** Untrained late interaction < dense on SciFact
 
-H3 and H5 directly depend on the (now-wired) `--colbert-checkpoint` flag.
+H3 and H5 need `--colbert-checkpoint` to test properly.
 
 ---
 

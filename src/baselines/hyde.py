@@ -28,7 +28,7 @@ class HyDERetriever:
         model_name: embedding model (sentence-transformers)
         generator_model_name: causal LM for hypothetical generation. If None
             (or loading fails), a deterministic template fallback is used —
-            this is explicit in logs so benchmark results are honestly labeled.
+            this is explicit in logs so benchmark results are clearly labeled.
         use_llm: if False, skip generator loading entirely (template mode).
     """
 

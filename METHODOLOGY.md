@@ -1,143 +1,61 @@
 # Methodology
 
-## 1. Problem Statement
+## Problem
 
-Current retrieval-augmented generation (RAG) systems typically use one of two approaches:
+RAPTOR builds hierarchical summary trees but retrieves with single-vector similarity. ColBERT uses per-token MaxSim scoring but operates on flat documents. This project combines them: ColBERT-style scoring at every level of a RAPTOR tree.
 
-1. **Single-vector retrieval**: Encode documents and queries into fixed-dimensional vectors, retrieve via cosine similarity. Fast but loses token-level information.
+## RAPTOR Tree Construction
 
-2. **Late interaction retrieval**: Encode documents and queries as sequences of per-token vectors, score via MaxSim (ColBERT). More expressive but expensive.
+Documents → ~100-token chunks (Level 0). Then iterate:
+1. UMAP dimensionality reduction (two-step: global + local)
+2. GMM clustering (BIC-selected cluster count, soft assignment threshold 0.1)
+3. Summarize each cluster (BART abstractive or TF-IDF extractive fallback)
+4. Re-embed summaries, repeat until clusters are too small
 
-Neither approach fully leverages hierarchical document structure. RAPTOR (Sarthi et al., 2024) builds recursive summary trees but retrieves with single-vector similarity. We hypothesize that applying late interaction scoring at every level of a RAPTOR tree will improve retrieval quality, especially for multi-hop queries.
+Every node stores both pooled embeddings (for single-vector) and per-token ColBERT embeddings (for late interaction).
 
-## 2. System Architecture
+## ColBERT Encoder
 
-### 2.1 RAPTOR Tree Construction
+`bert-base-uncased` → `Linear(768 → 128)` → L2 normalize. The projection head is NOT retrieval-trained by default — this is the main quality bottleneck for late interaction. Pass `--colbert-checkpoint` after running `make train-colbert` to fix this.
 
-Documents are chunked into ~100-token segments (Level 0). At each subsequent level:
+## Scoring
 
-1. **Dimensionality reduction**: UMAP reduces chunk embeddings to 10 dimensions
-2. **Clustering**: Gaussian Mixture Model (GMM) with BIC-selected cluster count
-3. **Soft assignment**: Nodes with P(cluster) > 0.1 are assigned to multiple clusters
-4. **Summarization**: Each cluster's texts are summarized (abstractive or extractive)
-5. **Re-embedding**: Summary nodes are embedded and re-clustered
+MaxSim: for each query token, find the most similar document token (cosine), sum across query tokens. Two retrieval strategies on the tree:
+- **Collapsed**: flatten all nodes, MaxSim top-k
+- **Traversal**: root → top-k → children → repeat until leaves
 
-This continues until clusters have fewer than `min_cluster_size` members.
+## Baselines
 
-**Two-step UMAP** (matching RAPTOR's paper):
-- Global: `n_neighbors ≈ sqrt(N-1)` — preserves corpus-wide structure
-- Local: `n_neighbors ≈ 10` — captures fine-grained structure
+| Pipeline | What it does |
+|---|---|
+| Naive Dense | SBERT (all-MiniLM-L6-v2) + cosine, 200-token chunks |
+| Hybrid | BM25 + Dense + Reciprocal Rank Fusion (k=60) |
+| HyDE | Generate hypothetical answer → embed → retrieve |
+| SPLADE | BERT MLM logits → sparse vectors with term expansion |
+| BM25+PRF | BM25 + Rocchio pseudo-relevance feedback |
+| Contextual | Document title/sentence prepended to each chunk before indexing |
+| Late Chunking | Encode full doc first, then split token embeddings by chunk |
 
-### 2.2 ColBERT Encoder
+## Evaluation
 
-**Backbone**: `bert-base-uncased` (pretrained, 768-dim)
-**Projection**: `Linear(768 → 128)`, Xavier-initialized
-**Output**: L2-normalized per-token embeddings
+**Datasets:** SciFact (5,183 docs, single-hop), HotpotQA (5.2M docs, multi-hop — use `--max-docs` for low RAM)
 
-The encoder produces a matrix of token embeddings for each text. These are stored at every tree node (leaf chunks AND summary nodes).
+**Metrics:** nDCG@k, Recall@k, MAP@k, Precision@k via BEIR + pytrec_eval
 
-**Important**: The projection head is NOT trained on retrieval triples in the baseline experiments. This is a known limitation — the encoder uses pretrained BERT representations with a random projection, not a retrieval-trained model. Results reflect this.
+**Significance:** Paired bootstrap (10k resamples) + t-test, Bonferroni-corrected. Per-query nDCG computed in numpy (BEIR's evaluate() returns corpus-averaged floats, not per-query — the original code silently got all-zero arrays).
 
-### 2.3 MaxSim Scoring
+## Hypotheses
 
-For query Q = [q₁, ..., qₘ] and document D = [d₁, ..., dₙ]:
+- **H1:** RAPTOR + late interaction > hybrid on HotpotQA (multi-hop needs hierarchy)
+- **H2:** RAPTOR + late interaction > RAPTOR single-vector (MaxSim > cosine)
+- **H3:** Late interaction > dense on nDCG@10 (only with trained projection)
+- **H4:** RAPTOR + late interaction ≈ hybrid on SciFact (single-hop doesn't need hierarchy)
+- **H5:** Untrained late interaction < dense on SciFact (untrained projection hurts)
 
-```
-MaxSim(Q, D) = Σᵢ maxⱼ sim(qᵢ, dⱼ)
-```
+## Limitations
 
-Where sim is cosine similarity. For each query token, we find its best match in the document, then sum across all query tokens.
-
-### 2.4 Retrieval Strategies
-
-**Collapsed**: Flatten all tree nodes into a single pool, MaxSim top-k.
-
-**Traversal**: Start at root nodes, MaxSim to select top-k, descend to their children, repeat until leaves.
-
-## 3. Baselines
-
-| Pipeline | Method | Components |
-|---|---|---|
-| Naive Dense | SBERT + cosine | `all-MiniLM-L6-v2`, 200-token chunks, 50-token overlap |
-| Hybrid | BM25 + Dense + RRF | Reciprocal Rank Fusion (k=60) |
-| HyDE | Hypothetical docs + dense | Template-based hypothetical document generation |
-| SPLADE | Learned sparse | BERT MLM logits, ReLU + log(1+x) activation |
-| BM25+PRF | BM25 + pseudo-relevance feedback | Rocchio expansion, top-5 docs, 10 expansion terms |
-| Contextual | Context-enriched chunks | Document title/first-sentence prefix on each chunk |
-| Late Chunking | Post-transformer chunking | Full document encoding, then chunk token embeddings |
-
-## 4. Evaluation Protocol
-
-### 4.1 Datasets
-
-- **SciFact** (BEIR): 5,183 documents, 300 queries — single-hop scientific claim verification
-- **HotpotQA** (BEIR): 5.2M documents, 7,405 queries — multi-hop question answering
-
-### 4.2 Metrics
-
-- **nDCG@k**: Normalized Discounted Cumulative Gain at k ∈ {1, 3, 5, 10, 100}
-- **Recall@k**: Fraction of relevant documents retrieved
-- **MAP@k**: Mean Average Precision
-- **Precision@k**: Fraction of retrieved documents that are relevant
-
-All computed via BEIR's `EvaluateRetrieval` wrapping `pytrec_eval`.
-
-### 4.3 Statistical Significance
-
-- **Paired bootstrap test**: 10,000 resamples per comparison
-- **Paired t-test**: Cross-check with parametric test
-- **Bonferroni correction**: Adjusted α for all C(n,2) pairwise comparisons
-- **95% confidence intervals**: From bootstrap distribution
-
-Per-query nDCG is computed by a pure-numpy implementation (trec_eval
-convention: linear gain, log2(rank+1) discount) in `src/eval/metrics.py`.
-This is required because BEIR's `EvaluateRetrieval.evaluate()` returns
-**corpus-averaged** floats, not a per-query dict — using it for per-query
-scores (the original implementation) silently produces all-zero arrays and
-meaningless p-values. The numpy implementation is pinned against
-hand-computed values in `tests/test_metrics.py`.
-
-### 4.4 Pre-registration
-
-Expectations are written BEFORE the final benchmark run (see `experiments/preregistration/template.md`). Results are compared against stated expectations, including where the system was wrong.
-
-## 5. Expected Results
-
-### Hypotheses (Pre-registered)
-
-**H1**: RAPTOR + late interaction (collapsed) > hybrid RAG on nDCG@10 for HotpotQA.
-*Reasoning*: Multi-hop questions benefit from hierarchical summaries + fine-grained token matching.
-
-**H2**: RAPTOR + late interaction > RAPTOR single-vector on nDCG@10.
-*Reasoning*: MaxSim is strictly more expressive than cosine similarity.
-
-**H3**: Late interaction (flat) > naive dense RAG on nDCG@10.
-*Reasoning*: Per-token matching captures more nuance than single-vector.
-
-**H4**: RAPTOR + late interaction shows minimal improvement on SciFact.
-*Reasoning*: Single-hop queries don't benefit from hierarchical structure.
-
-**H5**: Late interaction underperforms dense on SciFact.
-*Reasoning*: Untrained projection head hurts quality vs. fully-trained SBERT.
-
-### What Would Contradict Expectations
-
-- If RAPTOR + late interaction underperforms hybrid on HotpotQA → tree construction is not useful
-- If late interaction outperforms dense on SciFact → the method has broader applicability than expected
-- If SPLADE significantly outperforms all dense methods → sparse retrieval is underrated
-
-## 6. Known Limitations
-
-1. **Encoder not trained** (addressable): The projection head starts Xavier-initialized. Pass `--colbert-checkpoint checkpoints/final_model.pt` to the benchmark runner (after `make train-colbert`, which supports `--hard-negatives` for stronger training signal). Without a trained checkpoint, H5 (late interaction < dense) is expected to hold.
-2. **Soft-clustering ≈ hard assignment on short docs**: Per Stanford CS224N reproduction. Measured via `compute_soft_assignment_rate()`.
-3. **CPU-only benchmarking**: ColBERT encoding is ~20x slower without GPU. Batched encoding (`--encode-batch-size`) mitigates this; `--max-docs` enables HotpotQA on small machines by subsampling the corpus (judged docs always preserved so metrics stay valid).
-4. **Summarizer may degrade to extractive**: If BART fails to load (transformers 5.x compatibility, memory), the summarizer falls back to TF-IDF extractive summarization. A `_load_failed` flag prevents the infinite-retry bug; the fallback is logged so tree quality is honestly attributable.
-5. **Single dataset per run**: Cross-dataset generalization not yet measured; use `run_full` shells or run the runner twice with different `--dataset`.
-
-## 7. Reproducibility
-
-- All random seeds fixed (numpy: 42, torch: 42)
-- Package versions logged in `metadata.json`
-- Hardware profile recorded
-- Pre-registered expectations documented before runs
-- Code and data available at: `https://github.com/subhansh-dev/raven-retrieval`
+1. ColBERT projection not trained (fix: `make train-colbert`)
+2. Soft-clustering ≈ hard on short chunks
+3. CPU-only — ColBERT encoding is slow without GPU
+4. BART may fall back to extractive summarization (logged)
+5. Single dataset per run

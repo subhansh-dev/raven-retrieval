@@ -20,7 +20,7 @@
 
 *Late interaction, hierarchical trees, sparse expansion, hypothetical documents, contextual chunking, agentic decomposition, reflection, graph retrieval — all benchmarked head-to-head on BEIR datasets with proper statistical significance testing.*
 
-> **v0.3.0** — engineering pass: 6 critical bugs fixed (incl. the novel RAPTOR+MaxSim pipeline that previously couldn't run, and per-query significance scores that were silently all-zero), 7 logic bugs fixed, batched/memory-safe encoding, `--max-docs` corpus subsampling for low-RAM machines, `--colbert-checkpoint` wiring. See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for the honest before/after.
+> **v0.3.0** — Engineering pass: 6 critical bugs fixed (incl. the novel RAPTOR+MaxSim pipeline that previously couldn't run, and per-query significance scores that were silently all-zero), 7 logic bugs fixed, batched/memory-safe encoding, `--max-docs` corpus subsampling for low-RAM machines, `--colbert-checkpoint` wiring. See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for before/after.
 
 </div>
 
@@ -28,9 +28,7 @@
 
 ## What Is This
 
-This is a retrieval research framework. Not a production search engine, not a RAG template — a tool for actually comparing retrieval methods against each other on equal footing.
-
-Most retrieval blog posts tell you "Method X is better" without showing you the full picture. This project implements 14 different pipelines, runs them all on the same datasets with the same chunking, same evaluation metrics, and same statistical tests. The results are what they are. No cherry-picking.
+This is a retrieval research framework for comparing retrieval methods head-to-head on equal footing — same datasets, same chunking, same metrics, same statistical tests. It implements 19 pipelines and benchmarks them all against each other with proper significance testing.
 
 The core question it answers: **does applying ColBERT-style late interaction scoring at every level of a RAPTOR hierarchical tree actually improve retrieval quality over simpler approaches?** Everything else is scaffolding to answer that question properly.
 
@@ -252,7 +250,7 @@ All implemented in `src/eval/significance.py`. The `run_all_pairwise_tests()` fu
 
 ### Pre-registered Hypotheses
 
-Expectations are written BEFORE the benchmark run (see `experiments/preregistration/template.md`). Results are compared against stated expectations, including where the system was wrong. This prevents HARKing (Hypothesizing After Results are Known).
+Expectations are written before the benchmark run (see `experiments/preregistration/template.md`). Results are compared against stated expectations after the run.
 
 ---
 
@@ -429,17 +427,17 @@ For comparison, here are the v0.2 results on the full SciFact corpus with 100 qu
 
 ### Known Limitations
 
-1. **Encoder not trained on retrieval triples (addressable).** The ColBERT projection head is Xavier-initialized by default, which hurts late interaction quality vs fully-trained SBERT. **Fix:** `make train-colbert` (add `--hard-negatives` for BM25-mined hard negatives), then `--colbert-checkpoint checkpoints/final_model.pt` to the benchmark runner. This is the single biggest quality lever for late interaction.
+1. **Encoder not trained on retrieval triples .** The ColBERT projection head is Xavier-initialized by default, which hurts late interaction quality vs fully-trained SBERT. **Fix:** `make train-colbert` (add `--hard-negatives` for BM25-mined hard negatives), then `--colbert-checkpoint checkpoints/final_model.pt` to the benchmark runner. This is the single biggest quality lever for late interaction.
 
 2. **Soft-clustering ≈ hard assignment on short docs.** With short chunks (~100 tokens), the GMM soft assignments tend to converge to near-hard assignments. Measured via `compute_soft_assignment_rate()`. Matches the Stanford CS224N RAPTOR reproduction.
 
-3. **RAPTOR summarizer may use extractive fallback.** If BART fails to load (transformers version issues, memory constraints), falls back to TF-IDF extractive summarization. A `_load_failed` flag prevents the infinite-retry bug; the fallback is logged so tree quality is honestly attributable.
+3. **RAPTOR summarizer may use extractive fallback.** If BART fails to load (transformers version issues, memory constraints), falls back to TF-IDF extractive summarization. A `_load_failed` flag prevents the infinite-retry bug; the fallback is logged so tree quality is properly attributable.
 
 4. **SPLADE is slow on CPU.** Each chunk requires a BERT MLM forward pass (now batched). Use GPU, or accept that indexing takes longer than SBERT.
 
 5. **Late Chunking limited by context window.** Standard BERT caps at 512 tokens, so the "full document" is actually truncated. Needs a long-context embedding model (Jina-embeddings-v2, etc.) to realize the full benefit.
 
-6. **HotpotQA needs >6GB RAM (addressable).** The 5.2M-document corpus exceeds 6GB when encoded with SBERT. **Fix:** `--max-docs 2000` subsamples the corpus while *always preserving judged documents* so every metric stays valid. The unified runner also reuses one SBERT/ColBERT/BART instance across all pipelines (critical on a 4-8GB machine).
+6. **HotpotQA needs >6GB RAM .** The 5.2M-document corpus exceeds 6GB when encoded with SBERT. **Fix:** `--max-docs 2000` subsamples the corpus while *always preserving judged documents* so every metric stays valid. The unified runner also reuses one SBERT/ColBERT/BART instance across all pipelines (critical on a 4-8GB machine).
 
 7. **Per-query significance requires the numpy implementation.** BEIR's `EvaluateRetrieval.evaluate()` returns corpus-averaged floats, not a per-query dict — using it for per-query scores (the v0.2 bug) silently produces all-zero arrays and meaningless p-values. v0.3 computes per-query nDCG in pure numpy (trec_eval-compatible), pinned by `tests/test_metrics.py`.
 
@@ -513,7 +511,7 @@ raven-retrieval/
 │   ├── test_raptor.py           # chunker, UMAP, cluster count, soft cluster, tree ops, assignment rate (umap-guarded)
 │   ├── test_significance.py     # bootstrap known/no diff, t-test agreement, Bonferroni, pairwise
 │   └── test_integration.py      # pipeline wiring, tree flat retrieval, MaxSim end-to-end
-├── run_enhanced_benchmark.py    # THE unified runner: 19-pipeline registry, shared models, honest timing, error capture
+├── run_enhanced_benchmark.py    # Unified runner: 19-pipeline registry, shared models, separate index/query timing, error capture
 ├── Makefile                     # make test, test-core, benchmark, benchmark-fast, benchmark-baselines, benchmark-trained, train-colbert, report, clean
 ├── setup.py                     # pip install raven-retrieval[full,dev] with entry points (v0.3.0)
 ├── requirements.txt             # torch, transformers, sentence-transformers, faiss-cpu, rank-bm25, umap-learn, scikit-learn, beir, scipy, numpy, tqdm
@@ -522,7 +520,7 @@ raven-retrieval/
 ├── README.md                    # This file
 ├── METHODOLOGY.md               # Research paper methodology: hypotheses, architecture, baselines, evaluation protocol
 ├── RESEARCH_NOTES.md            # Deep research on 11 topics: ColBERTv2/PLAID, SPLATE, MUVERA, RAPTOR improvements, SPLADE, HyDE, GraphRAG, Agentic RAG, Contextual Retrieval, Late Chunking, Token Pooling
-├── BENCHMARK_RESULTS.md         # Actual results + analysis + what went wrong + next steps (honestly revised in v0.3)
+├── BENCHMARK_RESULTS.md         # Results + analysis + what went wrong + next steps (revised in v0.3)
 └── CONTRIBUTING.md              # How to add a new pipeline, code style, commit messages
 ```
 
@@ -743,32 +741,6 @@ Fallback when BART can't load:
 | GraphRAG | 2024 | Graph-based retrieval for global queries |
 
 See [`RESEARCH_NOTES.md`](RESEARCH_NOTES.md) for detailed technical analysis of 11 research topics with paper links, implementability assessments, and concrete improvement ideas.
-
----
-
-## Known Limitations
-
-1. **Encoder not trained on retrieval triples (addressable).** The ColBERT projection head is Xavier-initialized by default, which hurts late interaction quality vs fully-trained SBERT. **Fix:** `make train-colbert` (add `--hard-negatives` for BM21-mined hard negatives), then `--colbert-checkpoint checkpoints/final_model.pt` to the benchmark runner. This is the single biggest quality lever for late interaction.
-
-2. **Soft-clustering ≈ hard assignment on short docs.** With short chunks (~100 tokens), the GMM soft assignments tend to converge to near-hard assignments. Measured via `compute_soft_assignment_rate()`. Matches the Stanford CS224N RAPTOR reproduction.
-
-3. **RAPTOR summarizer may use extractive fallback.** If BART fails to load (transformers version issues, memory constraints), falls back to TF-IDF extractive summarization. A `_load_failed` flag prevents the infinite-retry bug; the fallback is logged so tree quality is honestly attributable.
-
-4. **SPLADE is slow on CPU.** Each chunk requires a BERT MLM forward pass (now batched). Use GPU, or accept that indexing takes longer than SBERT.
-
-5. **Late Chunking limited by context window.** Standard BERT caps at 512 tokens, so the "full document" is actually truncated. Needs a long-context embedding model (Jina-embeddings-v2, etc.) to realize the full benefit.
-
-6. **HotpotQA needs >6GB RAM (addressable).** The 5.2M-document corpus exceeds 6GB when encoded with SBERT. **Fix:** `--max-docs 2000` subsamples the corpus while *always preserving judged documents* so every metric stays valid. The unified runner also reuses one SBERT/ColBERT/BART instance across all pipelines (critical on a 4-8GB machine).
-
-7. **Per-query significance requires the numpy implementation.** BEIR's `EvaluateRetrieval.evaluate()` returns corpus-averaged floats, not a per-query dict — using it for per-query scores (the v0.2 bug) silently produces all-zero arrays and meaningless p-values. v0.3 computes per-query nDCG in pure numpy (trec_eval-compatible), pinned by `tests/test_metrics.py`.
-
----
-
-## What Would Contradict Expectations
-
-- If RAPTOR + late interaction underperforms hybrid on HotpotQA → tree construction isn't capturing useful hierarchical structure, or late interaction scoring isn't effective on summary nodes
-- If late interaction significantly outperforms dense on SciFact → the method has broader applicability than hypothesized (would need trained projection)
-- If SPLADE significantly outperforms all dense methods → sparse retrieval is underrated in the current RAG discourse
 
 ---
 

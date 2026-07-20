@@ -1,21 +1,16 @@
 """Raven-Retrieval — Unified Benchmark Runner.
 
-THE benchmark entry point (replaces the old run_benchmark.py /
-run_full_benchmark.py, which diverged and rotted — one of them mixed
-single-vector tree embeddings with MaxSim scoring and could only crash).
+Single entry point for all benchmarks (replaces the old run_benchmark.py /
+run_full_benchmark.py which had diverged).
 
-Design principles:
-1. SHARED MODEL INSTANCES: one SBERT, one ColBERT encoder, one BART
-   summarizer across all pipelines (on a 4-8GB machine, loading 5 copies
-   of SBERT is the difference between running and OOMing).
-2. HONEST TIMING: index time and query time tracked separately for every
-   pipeline (the old benchmark compared index+query for heavy pipelines
-   against query-only for light ones).
-3. MEMORY HYGIENE: gc between pipelines, batched encoding everywhere,
-   optional corpus subsampling (--max-docs) that always preserves judged
-   documents so metrics stay valid.
-4. NO SILENT FAILURES: every pipeline runs in its own try/except; failures
-   are recorded in errors.json and printed in the summary.
+Design:
+1. SHARED MODELS: one SBERT, one ColBERT, one BART across all pipelines
+   (avoids OOM on 4-8GB machines).
+2. SEPARATE TIMING: index and query time tracked independently.
+3. MEMORY SAFETY: gc between pipelines, batched encoding, optional
+   --max-docs subsampling (judged docs always preserved).
+4. ERROR CAPTURE: each pipeline runs in try/except; failures go to
+   errors.json and the summary.
 
 Usage:
     python run_enhanced_benchmark.py --dataset scifact --max-queries 100

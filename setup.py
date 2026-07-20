@@ -12,7 +12,7 @@ setup(
     description="Late-interaction retrieval meets hierarchical summarization trees",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
-    author="Raven Team",
+    author="subhansh-dev",
     license="MIT",
     packages=find_packages(),
     python_requires=">=3.10",
