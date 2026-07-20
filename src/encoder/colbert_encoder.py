@@ -183,6 +183,11 @@ class ColbertContrastiveEncoder(ColbertEncoder):
     @staticmethod
     def _maxsim_torch(query_emb, doc_emb):
         """MaxSim score between two embedding matrices (torch, differentiable)."""
+        # Handle batched input (batch, tokens, dim) -> squeeze to 2D
+        if query_emb.dim() == 3:
+            query_emb = query_emb.squeeze(0)
+        if doc_emb.dim() == 3:
+            doc_emb = doc_emb.squeeze(0)
         q_norm = torch.nn.functional.normalize(query_emb, p=2, dim=-1)
         d_norm = torch.nn.functional.normalize(doc_emb, p=2, dim=-1)
         sim = torch.mm(q_norm, d_norm.t())
