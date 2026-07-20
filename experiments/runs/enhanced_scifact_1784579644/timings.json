@@ -1,0 +1,32 @@
+{
+  "naive_dense": {
+    "index_s": 27.365,
+    "query_s": 0.126,
+    "total_s": 27.49,
+    "per_query_ms": 12.58
+  },
+  "hybrid_rag": {
+    "index_s": 26.891,
+    "query_s": 0.17,
+    "total_s": 27.061,
+    "per_query_ms": 17.03
+  },
+  "bm25_prf": {
+    "index_s": 0.066,
+    "query_s": 0.037,
+    "total_s": 0.103,
+    "per_query_ms": 3.7
+  },
+  "contextual_hybrid": {
+    "index_s": 26.167,
+    "query_s": 0.224,
+    "total_s": 26.391,
+    "per_query_ms": 22.38
+  },
+  "hyde": {
+    "index_s": 25.64,
+    "query_s": 0.174,
+    "total_s": 25.815,
+    "per_query_ms": 17.43
+  }
+}

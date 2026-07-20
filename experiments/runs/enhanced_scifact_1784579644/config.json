@@ -1,0 +1,16 @@
+{
+  "dataset": "scifact",
+  "max_queries": 10,
+  "max_docs": 500,
+  "top_k": 10,
+  "pipelines": [
+    "naive_dense",
+    "hybrid_rag",
+    "bm25_prf",
+    "contextual_hybrid",
+    "hyde"
+  ],
+  "colbert_checkpoint": null,
+  "corpus_size": 500,
+  "n_queries": 10
+}

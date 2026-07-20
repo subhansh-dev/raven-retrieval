@@ -258,7 +258,166 @@ Expectations are written BEFORE the benchmark run (see `experiments/preregistrat
 
 ## Benchmark Results
 
-### SciFact (BEIR) — 100 queries, top-10, CPU-only
+### Full Test Suite Results
+
+**Core Tests (no torch required):**
+```
+==================================================
+Raven-Retrieval Core Test Suite
+==================================================
+  ✅ chunker_basic
+  ✅ chunker_overlap
+  ✅ chunker_corpus
+  ✅ tree_ops
+  ✅ maxsim_basic
+  ✅ maxsim_ranking
+  ✅ maxsim_batch
+  ✅ umap_reduction
+  ✅ cluster_count
+  ✅ soft_assignment
+  ✅ extractive_summarizer
+  ✅ extractive_empty
+  ✅ compression_roundtrip
+  ✅ compression_ratio
+  ✅ compression_save_load
+  ✅ bootstrap_known_diff
+  ✅ bootstrap_no_diff
+  ✅ bonferroni
+  ✅ pairwise
+  ✅ dashboard
+  ✅ report
+  ✅ query_decomposition
+  ✅ centroid_index
+
+Results: 42 passed, 0 failed, 42 total assertions
+🎉 ALL TESTS PASSED
+```
+
+**Full pytest Suite (torch required):**
+```
+55 passed, 2 warnings in 85.48s
+
+Tests by module:
+  test_integration.py     3/3 passed  (pipeline wiring, tree flat retrieval, MaxSim end-to-end)
+  test_maxsim.py          6/6 passed  (scoring, ranking, batch, centroid index, approximate, fidelity)
+  test_metrics.py         9/9 passed  (per-query nDCG, recall, precision, MAP, trec_eval alignment)
+  test_pipelines_smoke.py 11/11 passed (DI-based contract tests for every retriever)
+  test_raptor.py          6/6 passed  (chunker, UMAP, cluster count, soft cluster, tree ops)
+  test_significance.py    5/5 passed  (bootstrap, t-test, Bonferroni, pairwise)
+  test_utils.py           15/15 passed (chunking, aggregation, RRF, timer, masking, L2 normalize)
+```
+
+### SciFact (BEIR) — v0.3.0 Benchmark Run
+
+**Run ID:** `enhanced_scifact_1784579644`
+**Date:** 2026-07-21
+**Hardware:** x86_64 CPU, ~6GB RAM, no GPU
+**Python:** 3.12.3 | **PyTorch:** 2.13.0+cpu | **Transformers:** 5.14.1
+**Dataset:** SciFact (BEIR) — 500 docs subsampled (judged docs preserved), 10 queries, top-10
+**Seed:** 42 (numpy + torch)
+
+#### nDCG Scores (Normalized Discounted Cumulative Gain)
+
+| Pipeline | nDCG@1 | nDCG@3 | nDCG@5 | nDCG@10 | nDCG@100 |
+|---|---|---|---|---|---|
+| **🥇 HyDE** | **1.0000** | **1.0000** | **1.0000** | **1.0000** | **1.0000** |
+| **🥈 Naive Dense RAG** | 0.9000 | 0.9631 | 0.9631 | 0.9631 | 0.9631 |
+| **🥉 Contextual Hybrid** | 0.8000 | 0.8000 | 0.8000 | 0.8690 | 0.8690 |
+| **Hybrid RAG (BM25+Dense)** | 0.8000 | 0.8000 | 0.8000 | 0.8672 | 0.8672 |
+| **BM25 + Rocchio PRF** | 0.6000 | 0.6631 | 0.7018 | 0.7018 | 0.7018 |
+
+#### MAP Scores (Mean Average Precision)
+
+| Pipeline | MAP@1 | MAP@3 | MAP@5 | MAP@10 | MAP@100 |
+|---|---|---|---|---|---|
+| **HyDE** | **1.0000** | **1.0000** | **1.0000** | **1.0000** | **1.0000** |
+| **Naive Dense RAG** | 0.9000 | 0.9500 | 0.9500 | 0.9500 | 0.9500 |
+| **Contextual Hybrid** | 0.8000 | 0.8000 | 0.8000 | 0.8310 | 0.8310 |
+| **Hybrid RAG** | 0.8000 | 0.8000 | 0.8000 | 0.8292 | 0.8292 |
+| **BM25 + Rocchio PRF** | 0.6000 | 0.6500 | 0.6700 | 0.6700 | 0.6700 |
+
+#### Recall Scores
+
+| Pipeline | Recall@1 | Recall@3 | Recall@5 | Recall@10 | Recall@100 |
+|---|---|---|---|---|---|
+| **HyDE** | **1.0000** | **1.0000** | **1.0000** | **1.0000** | **1.0000** |
+| **Naive Dense RAG** | 0.9000 | **1.0000** | **1.0000** | **1.0000** | **1.0000** |
+| **Contextual Hybrid** | 0.8000 | 0.8000 | 0.8000 | **1.0000** | **1.0000** |
+| **Hybrid RAG** | 0.8000 | 0.8000 | 0.8000 | **1.0000** | **1.0000** |
+| **BM25 + Rocchio PRF** | 0.6000 | 0.7000 | 0.8000 | 0.8000 | 0.8000 |
+
+#### Precision Scores
+
+| Pipeline | P@1 | P@3 | P@5 | P@10 | P@100 |
+|---|---|---|---|---|---|
+| **HyDE** | **1.0000** | 0.3333 | 0.2000 | 0.1000 | 0.0100 |
+| **Naive Dense RAG** | 0.9000 | 0.3333 | 0.2000 | 0.1000 | 0.0100 |
+| **Contextual Hybrid** | 0.8000 | 0.2667 | 0.1600 | 0.1000 | 0.0100 |
+| **Hybrid RAG** | 0.8000 | 0.2667 | 0.1600 | 0.1000 | 0.0100 |
+| **BM25 + Rocchio PRF** | 0.6000 | 0.2333 | 0.1600 | 0.0800 | 0.0080 |
+
+#### Latency (Index + Query Time)
+
+| Pipeline | Index Time | Query Time | Total Time | Per-Query Latency |
+|---|---|---|---|---|
+| **BM25 + Rocchio PRF** | **0.07s** | **0.04s** | **0.10s** | **3.7ms** |
+| **HyDE** | 25.64s | 0.17s | 25.82s | 17.4ms |
+| **Contextual Hybrid** | 26.17s | 0.22s | 26.39s | 22.4ms |
+| **Hybrid RAG** | 26.89s | 0.17s | 27.06s | 17.0ms |
+| **Naive Dense RAG** | 27.37s | 0.13s | 27.49s | 12.6ms |
+
+#### Per-Query nDCG@10 Detail
+
+| Query # | Naive Dense | Hybrid RAG | BM25 PRF | Contextual Hybrid | HyDE |
+|---|---|---|---|---|---|
+| Q1 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Q2 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Q3 | 1.0000 | 1.0000 | 0.6309 | 1.0000 | 1.0000 |
+| Q4 | 1.0000 | 0.3562 | 0.0000 | 0.3333 | 1.0000 |
+| Q5 | 1.0000 | 1.0000 | 0.3869 | 1.0000 | 1.0000 |
+| Q6 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Q7 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Q8 | 0.6309 | 0.3155 | 0.0000 | 0.3333 | 1.0000 |
+| Q9 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Q10 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| **Mean** | **0.9631** | **0.8672** | **0.7018** | **0.8690** | **1.0000** |
+
+#### Statistical Significance (Paired Bootstrap + t-test, Bonferroni-corrected)
+
+| Comparison | Observed Δ | Bootstrap p | t-test p | Bonferroni Sig? |
+|---|---|---|---|---|
+| Naive Dense vs Hybrid RAG | +0.096 | 0.107 | 0.195 | ❌ No |
+| Naive Dense vs BM25 PRF | +0.261 | 0.007 | 0.052 | ❌ No |
+| Naive Dense vs Contextual Hybrid | +0.096 | 0.107 | 0.201 | ❌ No |
+| Naive Dense vs HyDE | −0.037 | 0.359 | 0.343 | ❌ No |
+| Hybrid RAG vs BM25 PRF | +0.165 | 0.007 | 0.047 | ❌ No |
+| Hybrid RAG vs Contextual Hybrid | +0.001 | 0.458 | 0.873 | ❌ No |
+| Hybrid RAG vs HyDE | −0.133 | 0.107 | 0.168 | ❌ No |
+| BM25 PRF vs Contextual Hybrid | −0.165 | 0.007 | 0.047 | ❌ No |
+| BM25 PRF vs HyDE | −0.298 | 0.007 | 0.053 | ❌ No |
+| Contextual Hybrid vs HyDE | −0.133 | 0.107 | 0.168 | ❌ No |
+
+> **Note:** With only 10 queries, statistical power is limited. After Bonferroni correction (α=0.05/10=0.005), no pairwise comparison reaches significance. The BM25 PRF vs Dense/Hybrid differences (bootstrap p=0.007) are near the threshold. A full 100-query run would provide more power.
+
+### What These Numbers Mean
+
+**HyDE achieved perfect scores (nDCG@10 = 1.0).** On these 10 SciFact queries, generating a hypothetical answer before retrieval bridged the semantic gap perfectly — every relevant document was ranked at the top. This is partly a small-sample effect (10 queries), but the direction is consistent with HyDE's design thesis.
+
+**Naive Dense RAG came in strong (nDCG@10 = 0.96).** SciFact is single-hop scientific claim verification — exactly the kind of task where SBERT's semantic similarity shines. Dense retrieval is hard to beat on well-formed scientific queries.
+
+**Contextual Hybrid ≈ Hybrid RAG (0.87 vs 0.87).** Adding document context prefixes to chunks before BM25+dense fusion had minimal impact on SciFact. Makes sense — scientific abstracts are already self-contained; the "lost in the middle" problem context enrichment addresses is more relevant for long documents.
+
+**BM25 + Rocchio PRF was weakest (nDCG@10 = 0.70).** Pseudo-relevance feedback with query expansion via TF-IDF terms added noise on these scientific queries. BM25's lexical matching without semantic understanding struggles with the precise terminology of scientific claims.
+
+**Late Interaction couldn't run in this batch** (ColBERT encoder not included in --skip-heavy). The untrained projection head is the #1 quality bottleneck — `make train-colbert` + `--colbert-checkpoint` is the fix.
+
+**RAPTOR pipelines couldn't run in this batch** (also skipped as heavy). They need BART summarizer + UMAP clustering, which requires more time and RAM.
+
+**Latency tells a different story.** BM25 PRF is 260x faster to index (no neural encoding) and 3-6x faster to query. For applications where speed matters more than accuracy, it's a valid choice.
+
+### Historical Benchmark (v0.2.0 — 100 queries, full corpus)
+
+For comparison, here are the v0.2 results on the full SciFact corpus with 100 queries:
 
 | Pipeline | nDCG@1 | nDCG@3 | nDCG@5 | nDCG@10 | nDCG@100 | Index+Query Time |
 |---|---|---|---|---|---|---|
@@ -266,15 +425,23 @@ Expectations are written BEFORE the benchmark run (see `experiments/preregistrat
 | **Hybrid RAG (BM25+Dense)** | 0.5100 | 0.6122 | 0.6290 | 0.6668 | 0.6668 | 263.3s |
 | **Late Interaction (Flat)** | 0.4900 | 0.5562 | 0.5737 | 0.5801 | 0.5801 | 1181.4s |
 
-### What These Numbers Mean
+> v0.2 significance tests were invalid (per-query scores were all zeros due to a BEIR API bug). v0.3 results above use real per-query nDCG computation.
 
-**Dense beat Hybrid on SciFact.** Makes sense — SciFact is single-hop scientific claim verification. BM25's lexical matching adds noise without corresponding signal on these queries. Semantic similarity alone is already strong.
+### Known Limitations
 
-**Late Interaction underperformed Dense.** The ColBERT encoder uses a pretrained BERT backbone with a randomly-initialized projection head (not trained on retrieval triples). The untrained projection layer hurts quality compared to fully-trained SBERT embeddings. This is an honest, expected result — the code supports fine-tuning, it just hasn't been run yet.
+1. **Encoder not trained on retrieval triples (addressable).** The ColBERT projection head is Xavier-initialized by default, which hurts late interaction quality vs fully-trained SBERT. **Fix:** `make train-colbert` (add `--hard-negatives` for BM25-mined hard negatives), then `--colbert-checkpoint checkpoints/final_model.pt` to the benchmark runner. This is the single biggest quality lever for late interaction.
 
-**RAPTOR + Late Interaction couldn't run.** The BART summarizer pipeline had compatibility issues with transformers 5.x (the `summarization` task name was removed). The code has since been updated to use `AutoModelForSeq2SeqLM` directly, which works across versions.
+2. **Soft-clustering ≈ hard assignment on short docs.** With short chunks (~100 tokens), the GMM soft assignments tend to converge to near-hard assignments. Measured via `compute_soft_assignment_rate()`. Matches the Stanford CS224N RAPTOR reproduction.
 
-**HotpotQA OOM'd.** The full HotpotQA corpus (5.2M entries) exceeds 6GB RAM when encoding with SBERT. Needs either a machine with more RAM, corpus subsampling, or streaming encoding. This is the dataset where RAPTOR's hierarchical summaries should actually shine — multi-hop questions benefit from cross-passage relationships.
+3. **RAPTOR summarizer may use extractive fallback.** If BART fails to load (transformers version issues, memory constraints), falls back to TF-IDF extractive summarization. A `_load_failed` flag prevents the infinite-retry bug; the fallback is logged so tree quality is honestly attributable.
+
+4. **SPLADE is slow on CPU.** Each chunk requires a BERT MLM forward pass (now batched). Use GPU, or accept that indexing takes longer than SBERT.
+
+5. **Late Chunking limited by context window.** Standard BERT caps at 512 tokens, so the "full document" is actually truncated. Needs a long-context embedding model (Jina-embeddings-v2, etc.) to realize the full benefit.
+
+6. **HotpotQA needs >6GB RAM (addressable).** The 5.2M-document corpus exceeds 6GB when encoded with SBERT. **Fix:** `--max-docs 2000` subsamples the corpus while *always preserving judged documents* so every metric stays valid. The unified runner also reuses one SBERT/ColBERT/BART instance across all pipelines (critical on a 4-8GB machine).
+
+7. **Per-query significance requires the numpy implementation.** BEIR's `EvaluateRetrieval.evaluate()` returns corpus-averaged floats, not a per-query dict — using it for per-query scores (the v0.2 bug) silently produces all-zero arrays and meaningless p-values. v0.3 computes per-query nDCG in pure numpy (trec_eval-compatible), pinned by `tests/test_metrics.py`.
 
 ---
 

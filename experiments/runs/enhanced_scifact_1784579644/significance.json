@@ -1,0 +1,172 @@
+[
+  {
+    "pipeline_a": "naive_dense",
+    "pipeline_b": "hybrid_rag",
+    "bootstrap": {
+      "observed_diff": 0.09592576896777066,
+      "p_value": 0.1067,
+      "ci_95_lower": 0.0,
+      "ci_95_upper": 0.22468433154616624,
+      "n_resamples": 10000
+    },
+    "t_test": {
+      "t_statistic": 1.4009282351648886,
+      "p_value": 0.19475978470511238
+    },
+    "bonferroni_significant": false,
+    "adjusted_alpha": 0.005
+  },
+  {
+    "pipeline_a": "naive_dense",
+    "pipeline_b": "bm25_prf",
+    "bootstrap": {
+      "observed_diff": 0.2613147192765458,
+      "p_value": 0.0066,
+      "ci_95_lower": 0.06131471927654584,
+      "ci_95_upper": 0.4875006699908374,
+      "n_resamples": 10000
+    },
+    "t_test": {
+      "t_statistic": 2.2376669913639695,
+      "p_value": 0.0520411701331111
+    },
+    "bonferroni_significant": false,
+    "adjusted_alpha": 0.005
+  },
+  {
+    "pipeline_a": "naive_dense",
+    "pipeline_b": "contextual_hybrid",
+    "bootstrap": {
+      "observed_diff": 0.0964263086904791,
+      "p_value": 0.1067,
+      "ci_95_lower": 0.0,
+      "ci_95_upper": 0.22975964202381247,
+      "n_resamples": 10000
+    },
+    "t_test": {
+      "t_statistic": 1.3790396931163966,
+      "p_value": 0.2011841457571918
+    },
+    "bonferroni_significant": false,
+    "adjusted_alpha": 0.005
+  },
+  {
+    "pipeline_a": "naive_dense",
+    "pipeline_b": "hyde",
+    "bootstrap": {
+      "observed_diff": -0.036907024642854246,
+      "p_value": 0.3594,
+      "ci_95_lower": -0.11072107392856274,
+      "ci_95_upper": 0.0,
+      "n_resamples": 10000
+    },
+    "t_test": {
+      "t_statistic": -1.0,
+      "p_value": 0.3434363961379136
+    },
+    "bonferroni_significant": false,
+    "adjusted_alpha": 0.005
+  },
+  {
+    "pipeline_a": "hybrid_rag",
+    "pipeline_b": "bm25_prf",
+    "bootstrap": {
+      "observed_diff": 0.16538895030877518,
+      "p_value": 0.0066,
+      "ci_95_lower": 0.03562071871080222,
+      "ci_95_upper": 0.3065735963827292,
+      "n_resamples": 10000
+    },
+    "t_test": {
+      "t_statistic": 2.3008471115110174,
+      "p_value": 0.0469342865611769
+    },
+    "bonferroni_significant": false,
+    "adjusted_alpha": 0.005
+  },
+  {
+    "pipeline_a": "hybrid_rag",
+    "pipeline_b": "contextual_hybrid",
+    "bootstrap": {
+      "observed_diff": 0.0005005397227084319,
+      "p_value": 0.4581,
+      "ci_95_lower": -0.005360536964281365,
+      "ci_95_upper": 0.006862156132406661,
+      "n_resamples": 10000
+    },
+    "t_test": {
+      "t_statistic": 0.16384110490103318,
+      "p_value": 0.8734765720684713
+    },
+    "bonferroni_significant": false,
+    "adjusted_alpha": 0.005
+  },
+  {
+    "pipeline_a": "hybrid_rag",
+    "pipeline_b": "hyde",
+    "bootstrap": {
+      "observed_diff": -0.13283279361062492,
+      "p_value": 0.1067,
+      "ci_95_lower": -0.3300448685104476,
+      "ci_95_upper": 0.0,
+      "n_resamples": 10000
+    },
+    "t_test": {
+      "t_statistic": -1.4991188108491489,
+      "p_value": 0.16807487639119276
+    },
+    "bonferroni_significant": false,
+    "adjusted_alpha": 0.005
+  },
+  {
+    "pipeline_a": "bm25_prf",
+    "pipeline_b": "contextual_hybrid",
+    "bootstrap": {
+      "observed_diff": -0.16488841058606674,
+      "p_value": 0.0066,
+      "ci_95_lower": -0.3053691265384419,
+      "ci_95_upper": -0.03333333333333333,
+      "n_resamples": 10000
+    },
+    "t_test": {
+      "t_statistic": -2.300139968199936,
+      "p_value": 0.04698862593883024
+    },
+    "bonferroni_significant": false,
+    "adjusted_alpha": 0.005
+  },
+  {
+    "pipeline_a": "bm25_prf",
+    "pipeline_b": "hyde",
+    "bootstrap": {
+      "observed_diff": -0.29822174391940004,
+      "p_value": 0.0066,
+      "ci_95_lower": -0.5613147192765459,
+      "ci_95_upper": -0.06131471927654584,
+      "n_resamples": 10000
+    },
+    "t_test": {
+      "t_statistic": -2.220895010583565,
+      "p_value": 0.053485861828195536
+    },
+    "bonferroni_significant": false,
+    "adjusted_alpha": 0.005
+  },
+  {
+    "pipeline_a": "contextual_hybrid",
+    "pipeline_b": "hyde",
+    "bootstrap": {
+      "observed_diff": -0.13333333333333336,
+      "p_value": 0.1067,
+      "ci_95_lower": -0.33333333333333337,
+      "ci_95_upper": 0.0,
+      "n_resamples": 10000
+    },
+    "t_test": {
+      "t_statistic": -1.5,
+      "p_value": 0.16785065605707505
+    },
+    "bonferroni_significant": false,
+    "adjusted_alpha": 0.005
+  }
+]

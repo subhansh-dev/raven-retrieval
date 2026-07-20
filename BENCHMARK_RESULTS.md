@@ -83,3 +83,80 @@ H3 and H5 directly depend on the (now-wired) `--colbert-checkpoint` flag.
 3. Train ColBERT (`make train-colbert`) — short run is fine for a quality signal
 4. Full benchmark with `--colbert-checkpoint`
 5. The runner auto-generates: `metrics.json`, `per_query.json`, `significance.json` (now real p-values), `timings.json` (index/query split), `errors.json` (any pipeline failures, no longer silent), `dashboard.html`, `REPORT.md` (via `make report`)
+---
+
+## v0.3.0 — Actual Benchmark Run ✅
+
+**Run ID:** `enhanced_scifact_1784579644`
+**Date:** 2026-07-21
+**Hardware:** x86_64 CPU, ~6GB RAM, no GPU
+**Python:** 3.12.3 | **PyTorch:** 2.13.0+cpu | **Transformers:** 5.14.1
+**Dataset:** SciFact (BEIR) — 500 docs subsampled (judged docs preserved), 10 queries, top-10
+**Seed:** 42 (numpy + torch)
+
+### Test Suite Results
+
+- **Core tests:** 42/42 passed (numpy-only, no torch required)
+- **Full pytest:** 55/55 passed in 85.48s
+- All 7 test modules pass: integration, maxsim, metrics, pipelines smoke, raptor, significance, utils
+
+### nDCG@10 Results
+
+| Pipeline | nDCG@1 | nDCG@3 | nDCG@5 | nDCG@10 | nDCG@100 |
+|---|---|---|---|---|---|
+| **HyDE** | 1.0000 | 1.0000 | 1.0000 | **1.0000** | 1.0000 |
+| **Naive Dense RAG** | 0.9000 | 0.9631 | 0.9631 | 0.9631 | 0.9631 |
+| **Contextual Hybrid** | 0.8000 | 0.8000 | 0.8000 | 0.8690 | 0.8690 |
+| **Hybrid RAG** | 0.8000 | 0.8000 | 0.8000 | 0.8672 | 0.8672 |
+| **BM25 + Rocchio PRF** | 0.6000 | 0.6631 | 0.7018 | 0.7018 | 0.7018 |
+
+### Latency
+
+| Pipeline | Index Time | Query Time | Total | Per-Query |
+|---|---|---|---|---|
+| **BM25 + Rocchio PRF** | 0.07s | 0.04s | 0.10s | 3.7ms |
+| **HyDE** | 25.64s | 0.17s | 25.82s | 17.4ms |
+| **Hybrid RAG** | 26.89s | 0.17s | 27.06s | 17.0ms |
+| **Contextual Hybrid** | 26.17s | 0.22s | 26.39s | 22.4ms |
+| **Naive Dense RAG** | 27.37s | 0.13s | 27.49s | 12.6ms |
+
+### Per-Query nDCG@10 Detail
+
+| Query # | Naive Dense | Hybrid RAG | BM25 PRF | Contextual | HyDE |
+|---|---|---|---|---|---|
+| Q1 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Q2 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Q3 | 1.0000 | 1.0000 | 0.6309 | 1.0000 | 1.0000 |
+| Q4 | 1.0000 | 0.3562 | 0.0000 | 0.3333 | 1.0000 |
+| Q5 | 1.0000 | 1.0000 | 0.3869 | 1.0000 | 1.0000 |
+| Q6 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Q7 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Q8 | 0.6309 | 0.3155 | 0.0000 | 0.3333 | 1.0000 |
+| Q9 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Q10 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| **Mean** | **0.9631** | **0.8672** | **0.7018** | **0.8690** | **1.0000** |
+
+### Statistical Significance (10,000 bootstrap resamples, Bonferroni-corrected)
+
+| Comparison | Δ nDCG@10 | Bootstrap p | t-test p | Sig? |
+|---|---|---|---|---|
+| Dense vs BM25 PRF | +0.261 | 0.007 | 0.052 | ❌ |
+| Hybrid vs BM25 PRF | +0.165 | 0.007 | 0.047 | ❌ |
+| BM25 PRF vs Contextual | −0.165 | 0.007 | 0.047 | ❌ |
+| BM25 PRF vs HyDE | −0.298 | 0.007 | 0.053 | ❌ |
+| Dense vs Hybrid | +0.096 | 0.107 | 0.195 | ❌ |
+| Dense vs Contextual | +0.096 | 0.107 | 0.201 | ❌ |
+| Hybrid vs Contextual | +0.001 | 0.458 | 0.873 | ❌ |
+| Dense vs HyDE | −0.037 | 0.359 | 0.343 | ❌ |
+| Hybrid vs HyDE | −0.133 | 0.107 | 0.168 | ❌ |
+| Contextual vs HyDE | −0.133 | 0.107 | 0.168 | ❌ |
+
+> With 10 queries, no comparison reaches Bonferroni significance (α=0.005). BM25 PRF vs Dense/Hybrid (p=0.007) is near threshold. Full 100-query run needed for proper power.
+
+### Interpretation
+
+1. **HyDE perfect score** — Hypothetical document generation bridged the semantic gap perfectly on these queries. Partly small-sample, but directionally consistent.
+2. **Naive Dense strong (0.96)** — SciFact's single-hop scientific claims are ideal for SBERT.
+3. **Contextual ≈ Hybrid (0.87)** — Context prefixes didn't help on already self-contained abstracts.
+4. **BM25 PRF weakest (0.70)** — TF-IDF query expansion added noise on precise scientific terminology.
+5. **BM25 PRF fastest** — 260x faster indexing, 3-6x faster querying. Valid when speed > accuracy.
