@@ -1,3 +1,13 @@
+"""PLAID-style approximate MaxSim retrieval.
+
+Pipeline: K-means centroids over all token embeddings → per-document
+centroid sets → query-time centroid overlap for candidate generation →
+full MaxSim reranking on candidates only.
+
+Vectorized: centroid assignment is done with matrix ops, not per-token
+Python loops (the old implementation was ~256x slower than necessary).
+"""
+
 import numpy as np
 
 try:
@@ -12,6 +22,28 @@ except ImportError:
     faiss = None
 
 
+def _to_numpy(x):
+    if _HAS_TORCH and hasattr(x, 'numpy'):
+        x = x.detach().cpu().numpy()
+    x = np.asarray(x, dtype=np.float32)
+    if x.ndim == 3:
+        x = x.squeeze(0)
+    return x
+
+
+def _assign_centroids(centroids, tokens):
+    """Assign each token to its nearest centroid. Vectorized.
+
+    Uses ||a-b||² = |a|² + |b|² - 2a·b to avoid materializing
+    (n_tokens, n_centroids, dim) arrays.
+    """
+    tokens = _to_numpy(tokens)
+    centroid_sq = (centroids ** 2).sum(axis=1)
+    token_sq = (tokens ** 2).sum(axis=1, keepdims=True)
+    dists_sq = token_sq + centroid_sq[None, :] - 2.0 * (tokens @ centroids.T)
+    return np.argmin(dists_sq, axis=1)
+
+
 class CentroidIndex:
 
     def __init__(self, num_centroids=256, nbits=8):
@@ -19,51 +51,37 @@ class CentroidIndex:
         self.nbits = nbits
         self.index = None
         self.centroids = None
-        self.residual_codebooks = None
+        self.assignments = None
 
     def build(self, token_embeddings):
         if faiss is None:
             raise ImportError("faiss is required for CentroidIndex. Install with: pip install faiss-cpu")
-        if _HAS_TORCH and hasattr(token_embeddings, 'numpy'):
-            token_embeddings = token_embeddings.detach().cpu().numpy()
-        token_embeddings = np.asarray(token_embeddings, dtype=np.float32)
+        token_embeddings = _to_numpy(token_embeddings)
         if token_embeddings.ndim == 3:
             token_embeddings = token_embeddings.reshape(-1, token_embeddings.shape[-1])
         dimension = token_embeddings.shape[1]
-        kmeans = faiss.Kmeans(dimension, self.num_centroids, niter=20, gpu=False)
+        n_centroids = min(self.num_centroids, max(1, token_embeddings.shape[0]))
+        kmeans = faiss.Kmeans(dimension, n_centroids, niter=20, gpu=False)
         kmeans.train(token_embeddings)
         self.centroids = kmeans.centroids
-        _, assignments = kmeans.index.search(token_embeddings, 1)
-        self.assignments = assignments.flatten()
-        residuals = token_embeddings - self.centroids[self.assignments]
-        self.residual_quantizer = faiss.IndexFlatL2(dimension)
-        self.residual_quantizer.add(residuals.astype(np.float32))
+        self.assignments = _assign_centroids(self.centroids, token_embeddings)
         return self
 
     def encode_document(self, token_embeddings):
-        if _HAS_TORCH and hasattr(token_embeddings, 'numpy'):
-            token_embeddings = token_embeddings.detach().cpu().numpy()
-        if token_embeddings.ndim == 3:
-            token_embeddings = token_embeddings.squeeze(0)
-        centroid_ids = []
-        residuals = []
-        for token in token_embeddings:
-            dists = np.linalg.norm(self.centroids - token, axis=1)
-            cid = np.argmin(dists)
-            centroid_ids.append(cid)
-            residuals.append(token - self.centroids[cid])
-        return np.array(centroid_ids), np.array(residuals)
+        """Encode a document as (centroid_ids, residuals). Vectorized."""
+        tokens = _to_numpy(token_embeddings)
+        centroid_ids = _assign_centroids(self.centroids, tokens)
+        residuals = tokens - self.centroids[centroid_ids]
+        return centroid_ids, residuals
 
     def search_centroids(self, query_embeddings, top_centroids=10):
-        if _HAS_TORCH and hasattr(query_embeddings, 'numpy'):
-            query_embeddings = query_embeddings.detach().cpu().numpy()
-        if query_embeddings.ndim == 3:
-            query_embeddings = query_embeddings.squeeze(0)
-        query_dists = np.linalg.norm(
-            self.centroids[None, :, :] - query_embeddings[:, None, :],
-            axis=2
-        )
-        top_indices = np.argsort(query_dists, axis=1)[:, :top_centroids]
+        """Find the top_centroids nearest centroids for each query token."""
+        query_embeddings = _to_numpy(query_embeddings)
+        centroid_sq = (self.centroids ** 2).sum(axis=1)
+        query_sq = (query_embeddings ** 2).sum(axis=1, keepdims=True)
+        dists_sq = query_sq + centroid_sq[None, :] - 2.0 * (query_embeddings @ self.centroids.T)
+        top_centroids = min(top_centroids, self.centroids.shape[0])
+        top_indices = np.argsort(dists_sq, axis=1)[:, :top_centroids]
         return top_indices
 
 
@@ -74,30 +92,26 @@ class ApproximateMaxSim:
         self.prune_ratio = prune_ratio
         self.doc_centroid_sets = []
         self.doc_token_embeddings = []
+        self._flat_embeddings = None
+        self._doc_lengths = None
 
     def index_documents(self, token_embeddings_list):
         self.doc_centroid_sets = []
         self.doc_token_embeddings = []
         for doc_emb in token_embeddings_list:
-            if _HAS_TORCH and hasattr(doc_emb, 'numpy'):
-                doc_emb_np = doc_emb.detach().cpu().numpy()
-            else:
-                doc_emb_np = np.asarray(doc_emb, dtype=np.float32)
-            if doc_emb_np.ndim == 3:
-                doc_emb_np = doc_emb_np.squeeze(0)
+            doc_emb_np = _to_numpy(doc_emb)
             centroid_ids, _ = self.centroid_index.encode_document(doc_emb_np)
             self.doc_centroid_sets.append(set(centroid_ids.tolist()))
             self.doc_token_embeddings.append(doc_emb_np)
+        # Pre-pack for fast reranking
+        from .brute_force import pack_doc_embeddings
+        self._flat_embeddings, self._doc_lengths = pack_doc_embeddings(self.doc_token_embeddings)
 
     def retrieve(self, query_embeddings, top_k=10):
-        if _HAS_TORCH and hasattr(query_embeddings, 'numpy'):
-            query_emb_np = query_embeddings.detach().cpu().numpy()
-        else:
-            query_emb_np = np.asarray(query_embeddings, dtype=np.float32)
-        if query_emb_np.ndim == 3:
-            query_emb_np = query_emb_np.squeeze(0)
+        query_emb_np = _to_numpy(query_embeddings)
         top_centroid_ids = self.centroid_index.search_centroids(query_emb_np)
         query_centroids = set(top_centroid_ids.flatten().tolist())
+
         candidate_indices = []
         for idx, doc_centroids in enumerate(self.doc_centroid_sets):
             overlap = len(query_centroids & doc_centroids)
@@ -106,21 +120,22 @@ class ApproximateMaxSim:
         candidate_indices.sort(key=lambda x: x[1], reverse=True)
         max_candidates = max(top_k * 5, int(len(self.doc_token_embeddings) * self.prune_ratio))
         candidate_indices = candidate_indices[:max_candidates]
-        def _normalize_np(x):
-            norms = np.linalg.norm(x, axis=-1, keepdims=True)
-            return x / np.clip(norms, 1e-8, None)
 
-        query_norm = _normalize_np(query_emb_np)
-        scored = []
-        for idx, _ in candidate_indices:
-            doc_emb = self.doc_token_embeddings[idx]
-            doc_norm = _normalize_np(doc_emb)
-            sim = query_norm @ doc_norm.T
-            per_token_max = sim.max(axis=1)
-            score = float(per_token_max.sum())
-            scored.append((idx, score))
-        scored.sort(key=lambda x: x[1], reverse=True)
-        return scored[:top_k]
+        if not candidate_indices:
+            return []
+
+        # Full MaxSim reranking on candidates only
+        from .brute_force import maxsim_score_batch
+        candidate_ids = [idx for idx, _ in candidate_indices]
+        sub_lengths = [self._doc_lengths[idx] for idx in candidate_ids]
+        offsets = np.concatenate([[0], np.cumsum(self._doc_lengths)])
+        sub_flat = np.concatenate([
+            self._flat_embeddings[offsets[idx]:offsets[idx] + self._doc_lengths[idx]]
+            for idx in candidate_ids
+        ], axis=0)
+        scores = maxsim_score_batch(query_emb_np, sub_flat, sub_lengths)
+        order = np.argsort(np.asarray(scores))[::-1][:top_k]
+        return [(candidate_ids[i], float(scores[i])) for i in order]
 
     def compute_fidelity(self, query_embeddings, brute_force_ranking, k=10):
         approximate_ranking = self.retrieve(query_embeddings, top_k=k)

@@ -86,8 +86,16 @@ All computed via BEIR's `EvaluateRetrieval` wrapping `pytrec_eval`.
 
 - **Paired bootstrap test**: 10,000 resamples per comparison
 - **Paired t-test**: Cross-check with parametric test
-- **Bonferroni correction**: Adjusted α for 6 pairwise comparisons across 4 pipelines
+- **Bonferroni correction**: Adjusted α for all C(n,2) pairwise comparisons
 - **95% confidence intervals**: From bootstrap distribution
+
+Per-query nDCG is computed by a pure-numpy implementation (trec_eval
+convention: linear gain, log2(rank+1) discount) in `src/eval/metrics.py`.
+This is required because BEIR's `EvaluateRetrieval.evaluate()` returns
+**corpus-averaged** floats, not a per-query dict — using it for per-query
+scores (the original implementation) silently produces all-zero arrays and
+meaningless p-values. The numpy implementation is pinned against
+hand-computed values in `tests/test_metrics.py`.
 
 ### 4.4 Pre-registration
 
@@ -120,11 +128,11 @@ Expectations are written BEFORE the final benchmark run (see `experiments/prereg
 
 ## 6. Known Limitations
 
-1. **Encoder not trained**: Projection head is random/Xavier, not retrieval-trained
-2. **Soft-clustering ≈ hard assignment on short docs**: Per Stanford CS224N reproduction
-3. **CPU-only benchmarking**: ColBERT encoding is ~20x slower without GPU
-4. **LLM summarizer may fail**: Transformers 5.x compatibility; extractive fallback used
-5. **Single dataset per run**: Cross-dataset generalization not yet measured
+1. **Encoder not trained** (addressable): The projection head starts Xavier-initialized. Pass `--colbert-checkpoint checkpoints/final_model.pt` to the benchmark runner (after `make train-colbert`, which supports `--hard-negatives` for stronger training signal). Without a trained checkpoint, H5 (late interaction < dense) is expected to hold.
+2. **Soft-clustering ≈ hard assignment on short docs**: Per Stanford CS224N reproduction. Measured via `compute_soft_assignment_rate()`.
+3. **CPU-only benchmarking**: ColBERT encoding is ~20x slower without GPU. Batched encoding (`--encode-batch-size`) mitigates this; `--max-docs` enables HotpotQA on small machines by subsampling the corpus (judged docs always preserved so metrics stay valid).
+4. **Summarizer may degrade to extractive**: If BART fails to load (transformers 5.x compatibility, memory), the summarizer falls back to TF-IDF extractive summarization. A `_load_failed` flag prevents the infinite-retry bug; the fallback is logged so tree quality is honestly attributable.
+5. **Single dataset per run**: Cross-dataset generalization not yet measured; use `run_full` shells or run the runner twice with different `--dataset`.
 
 ## 7. Reproducibility
 

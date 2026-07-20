@@ -1,6 +1,6 @@
 """Raven-Retrieval: Late-interaction retrieval meets hierarchical summarization trees.
 
-12 retrieval pipelines benchmarked head-to-head on BEIR datasets
+19 retrieval pipelines benchmarked head-to-head on BEIR datasets
 with proper statistical significance testing.
 """
 
@@ -8,7 +8,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="raven-retrieval",
-    version="0.2.0",
+    version="0.3.0",
     description="Late-interaction retrieval meets hierarchical summarization trees",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",

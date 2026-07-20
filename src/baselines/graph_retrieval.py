@@ -44,35 +44,43 @@ class DocumentGraph:
             "embedding": np.asarray(embedding, dtype=np.float32),
         }
 
-    def build_graph(self):
-        """Build edges based on cosine similarity between node embeddings."""
+    def build_graph(self, block_size=1024):
+        """Build edges based on cosine similarity between node embeddings.
+
+        Memory-safe: similarities are computed in row BLOCKS, never a full
+        N×N matrix (a 50K-node full matrix is 10GB; blocked it's ~40MB).
+        """
         if len(self.nodes) < 2:
             self._built = True
             return
 
         node_ids = list(self.nodes.keys())
-        embeddings = np.array([self.nodes[nid]["embedding"] for nid in node_ids])
+        embeddings = np.array([self.nodes[nid]["embedding"] for nid in node_ids], dtype=np.float32)
 
         # Normalize
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
         embeddings = embeddings / np.clip(norms, 1e-8, None)
 
-        # Compute pairwise similarities
-        sim_matrix = embeddings @ embeddings.T
-
-        # Build edges
+        n = len(node_ids)
         self.edges = {}
-        for i, nid_a in enumerate(node_ids):
-            # Get top-k most similar neighbors
-            sim_scores = sim_matrix[i]
-            top_indices = np.argsort(sim_scores)[::-1][1:self.max_edges + 1]  # skip self
+        k = min(self.max_edges + 1, n)  # +1 to skip self
 
-            for j in top_indices:
-                if sim_scores[j] >= self.threshold:
-                    nid_b = node_ids[j]
-                    edge = (min(nid_a, nid_b), max(nid_a, nid_b))
-                    if edge not in self.edges:
-                        self.edges[edge] = float(sim_scores[j])
+        for start in range(0, n, block_size):
+            end = min(start + block_size, n)
+            sim_block = embeddings[start:end] @ embeddings.T  # (block, N)
+
+            for i_local in range(end - start):
+                i = start + i_local
+                sim_scores = sim_block[i_local]
+                top_indices = np.argsort(sim_scores)[::-1][:k]
+                for j in top_indices:
+                    if j == i:
+                        continue
+                    if sim_scores[j] >= self.threshold:
+                        nid_a, nid_b = node_ids[i], node_ids[j]
+                        edge = (min(nid_a, nid_b), max(nid_a, nid_b))
+                        if edge not in self.edges:
+                            self.edges[edge] = float(sim_scores[j])
 
         self._built = True
         logger.info(f"Graph built: {len(self.nodes)} nodes, {len(self.edges)} edges")

@@ -1,8 +1,13 @@
 import sys
 import os
 import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+# Clustering depends on umap; skip the whole module gracefully if absent
+# (collection shouldn't hard-fail in minimal environments).
+pytest.importorskip("umap")
 
 from src.raptor.chunker import TextChunker
 from src.raptor.clustering import (

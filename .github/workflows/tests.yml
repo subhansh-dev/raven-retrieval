@@ -21,12 +21,18 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Install dependencies
+    - name: Install dependencies (numpy/scipy/sklearn only — no torch)
       run: |
-        pip install numpy scipy scikit-learn rank-bm25 umap-learn tqdm
+        pip install numpy scipy scikit-learn tqdm
 
-    - name: Run core tests
-      run: python tests/run_core_tests.py
+    - name: Run core tests (utils, metrics, maxsim, compression, significance)
+      run: |
+        PYTHONIOENCODING=utf-8 PYTHONUTF8=1 python tests/run_core_tests.py
+
+    - name: Run smoke tests (dependency-injected pipelines, skipped if deps missing)
+      run: |
+        pip install pytest
+        PYTHONIOENCODING=utf-8 PYTHONUTF8=1 python -m pytest tests/test_utils.py tests/test_metrics.py tests/test_pipelines_smoke.py -q
 
   test-full:
     runs-on: ubuntu-latest
@@ -40,12 +46,13 @@ jobs:
       with:
         python-version: "3.12"
 
-    - name: Install dependencies
+    - name: Install full dependencies
       run: |
-        pip install -r requirements.txt
+        pip install -r requirements.txt -r requirements-dev.txt
 
-    - name: Run full tests
-      run: python -m pytest tests/ -v --tb=short
+    - name: Run full test suite
+      run: |
+        PYTHONIOENCODING=utf-8 PYTHONUTF8=1 python -m pytest tests/ -v --tb=short
 
   benchmark:
     runs-on: ubuntu-latest
@@ -63,9 +70,11 @@ jobs:
       run: |
         pip install -r requirements.txt
 
-    - name: Run fast benchmark
+    - name: Run fast benchmark (baselines only, tiny corpus — fits CI RAM)
       run: |
-        python run_enhanced_benchmark.py --dataset scifact --max-queries 20 --skip-heavy
+        PYTHONIOENCODING=utf-8 PYTHONUTF8=1 \
+        python run_enhanced_benchmark.py --dataset scifact --max-queries 10 \
+          --max-docs 200 --skip-heavy
 
     - name: Upload results
       uses: actions/upload-artifact@v4

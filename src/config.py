@@ -98,6 +98,12 @@ class ExperimentConfig:
         "contextual_hybrid", "late_interaction", "raptor_late_collapsed",
     ])
 
+    # Corpus subsampling (for low-RAM machines). None = full corpus.
+    max_docs: Optional[int] = None
+
+    # Trained ColBERT checkpoint (from src.training.train_colbert). None = untrained.
+    colbert_checkpoint: Optional[str] = None
+
     # Hardware
     device: str = "auto"  # "auto", "cpu", "cuda"
     num_workers: int = 1
@@ -180,9 +186,10 @@ class ExperimentConfig:
         """Validate configuration."""
         valid_pipelines = {
             "naive_dense", "hybrid_rag", "hyde", "splade", "splade_hybrid",
-            "bm25_prf", "contextual_hybrid", "late_chunking",
-            "late_interaction", "raptor_single_vector",
-            "raptor_late_collapsed", "raptor_late_traversal",
+            "bm25_prf", "contextual_dense", "contextual_bm25", "contextual_hybrid",
+            "late_chunking", "late_interaction", "late_interaction_approx",
+            "raptor_single_vector", "raptor_late_collapsed", "raptor_late_traversal",
+            "two_stage_dense", "agentic_multihop", "reflection", "graph",
         }
         invalid = set(self.pipelines) - valid_pipelines
         if invalid:
@@ -190,6 +197,9 @@ class ExperimentConfig:
 
         if self.max_queries is not None and self.max_queries < 1:
             raise ValueError("max_queries must be >= 1")
+
+        if self.max_docs is not None and self.max_docs < 1:
+            raise ValueError("max_docs must be >= 1")
 
         if self.retrieval.top_k < 1:
             raise ValueError("top_k must be >= 1")

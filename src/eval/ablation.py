@@ -1,8 +1,20 @@
+"""Ablation helpers.
+
+The critical fix in this module: collect_per_query_scores now returns REAL
+per-query nDCG values.
+
+Previously it called BEIR's EvaluateRetrieval.evaluate(), which returns
+corpus-AVERAGED floats (see beir/retrieval/evaluation.py — it sums
+scores["ndcg_cut_k"] across queries and divides). Treating those floats as
+a per-query dict silently produced a list of zeros for every query, which
+made every bootstrap/t-test comparison meaningless (zero variance). The
+"known BEIR artifact" mentioned in old docs was actually this bug.
+"""
+
 import json
-import time
 import numpy as np
 
-from .metrics import run_beir_evaluation, measure_latency, save_per_query_results
+from .metrics import run_beir_evaluation, collect_per_query_ndcg
 
 
 ABLATION_CONFIGS = [
@@ -16,18 +28,8 @@ ABLATION_CONFIGS = [
 
 
 def collect_per_query_scores(qrels, results, k=10):
-    from beir.retrieval.evaluation import EvaluateRetrieval
-    evaluator = EvaluateRetrieval()
-    ndcg, _map, recall, precision = evaluator.evaluate(qrels, results, [k])
-    key = f"NDCG@{k}"
-    per_query = ndcg.get(key, {})
-    scores = []
-    for qid in qrels:
-        if isinstance(per_query, dict):
-            scores.append(per_query.get(qid, 0.0))
-        else:
-            scores.append(0.0)
-    return scores
+    """Per-query nDCG@k aligned to qrels key order (pure numpy, real values)."""
+    return collect_per_query_ndcg(qrels, results, k=k)
 
 
 class AblationRunner:
@@ -58,7 +60,9 @@ class AblationRunner:
         results = {}
         for qid, query in self.queries.items():
             query_emb = encoder.encode_query(query)
-            query_emb_np = query_emb.cpu().numpy()
+            query_emb_np = query_emb.detach().cpu().numpy()
+            if query_emb_np.ndim == 3:
+                query_emb_np = query_emb_np.squeeze(0)
             ranked = brute_force_rank(query_emb_np, corpus_embeddings_list, top_k=top_k)
             results[qid] = {corpus_ids[idx]: score for idx, score in ranked}
         return results

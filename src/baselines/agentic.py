@@ -139,17 +139,49 @@ class ReflectionRetriever:
 
     Pattern:
     1. Initial retrieval
-    2. LLM evaluates: "Is this context sufficient to answer the question?"
+    2. Evaluate: "Is this context sufficient to answer the question?"
     3. If not, reformulate query and re-retrieve
     4. Repeat up to max_iterations
 
     Reference: Self-RAG (Asai et al., 2023)
+
+    Args:
+        base_retriever: any retriever with .retrieve(query, top_k)
+        text_lookup: callable(doc_id) -> document text. REQUIRED for real
+            sufficiency evaluation — the old version evaluated keyword
+            coverage over doc ID STRINGS (which never contain query
+            keywords), so reflection triggered (or didn't) essentially
+            at random. If None, falls back to retriever.corpus_texts
+            when available.
+        max_iterations: max retrieve-evaluate-reformulate cycles
+        top_k: results per retrieval round
     """
 
-    def __init__(self, base_retriever, max_iterations=2, top_k=10):
+    def __init__(self, base_retriever, text_lookup=None, max_iterations=2, top_k=10):
         self.base_retriever = base_retriever
         self.max_iterations = max_iterations
         self.top_k = top_k
+        if text_lookup is None:
+            text_lookup = self._build_default_lookup(base_retriever)
+        self.text_lookup = text_lookup
+
+    @staticmethod
+    def _build_default_lookup(base_retriever):
+        """Try to build a text lookup from the retriever's own index."""
+        corpus_ids = getattr(base_retriever, "corpus_ids", None)
+        corpus_texts = getattr(base_retriever, "corpus_texts", None)
+        if corpus_ids and corpus_texts:
+            chunk_map = {}
+            for cid, text in zip(corpus_ids, corpus_texts):
+                doc_id = cid.split("::")[0]
+                if doc_id not in chunk_map:
+                    chunk_map[doc_id] = []
+                chunk_map[doc_id].append(text)
+
+            def lookup(doc_id):
+                return " ".join(chunk_map.get(doc_id, []))
+            return lookup
+        return None
 
     def _evaluate_context(self, query, context_texts):
         """Evaluate if retrieved context is sufficient.
@@ -228,8 +260,13 @@ class ReflectionRetriever:
                     all_results.append((doc_id, score))
                     seen_doc_ids.add(doc_id)
 
-            # Evaluate context sufficiency
-            context_texts = [doc_id for doc_id, _ in results]  # Use doc IDs as proxy
+            # Evaluate context sufficiency over actual document TEXT
+            if self.text_lookup is not None:
+                context_texts = [self.text_lookup(doc_id) for doc_id, _ in results]
+            else:
+                logger.warning("ReflectionRetriever: no text_lookup available — "
+                               "sufficiency evaluation disabled, returning first-pass results")
+                break
             sufficient, coverage = self._evaluate_context(query, context_texts)
 
             if sufficient:

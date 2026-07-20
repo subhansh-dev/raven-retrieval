@@ -7,8 +7,8 @@
 ![Transformers](https://img.shields.io/badge/Transformers-5.14-FFD21E?logo=huggingface&logoColor=black)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
-![Tests](https://img.shields.io/badge/Tests-39%2F39%20Passing-brightgreen)
-![Pipelines](https://img.shields.io/badge/Pipelines-14-blueviolet)
+![Tests](https://img.shields.io/badge/Tests-50%2B%20Passing-brightgreen)
+![Pipelines](https://img.shields.io/badge/Pipelines-19-blueviolet)
 ![ColBERT](https://img.shields.io/badge/ColBERT-Late%20Interaction-orange)
 ![RAPTOR](https://img.shields.io/badge/RAPTOR-Hierarchical%20Tree-purple)
 ![SPLADE](https://img.shields.io/badge/SPLADE-Sparse%20Expansion-green)
@@ -16,9 +16,11 @@
 ![FAISS](https://img.shields.io/badge/FAISS-CPU-005C84?logo=meta&logoColor=white)
 ![CI](https://img.shields.io/badge/CI-GitHub%20Actions-black?logo=githubactions)
 
-**14 retrieval pipelines. Real benchmarks. Honest results.**
+**19 retrieval pipelines. Real benchmarks. Honest results.**
 
-*Late interaction, hierarchical trees, sparse expansion, hypothetical documents, contextual chunking, agentic decomposition — all benchmarked head-to-head on BEIR datasets with proper statistical significance testing.*
+*Late interaction, hierarchical trees, sparse expansion, hypothetical documents, contextual chunking, agentic decomposition, reflection, graph retrieval — all benchmarked head-to-head on BEIR datasets with proper statistical significance testing.*
+
+> **v0.3.0** — engineering pass: 6 critical bugs fixed (incl. the novel RAPTOR+MaxSim pipeline that previously couldn't run, and per-query significance scores that were silently all-zero), 7 logic bugs fixed, batched/memory-safe encoding, `--max-docs` corpus subsampling for low-RAM machines, `--colbert-checkpoint` wiring. See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for the honest before/after.
 
 </div>
 
@@ -32,7 +34,7 @@ Most retrieval blog posts tell you "Method X is better" without showing you the 
 
 The core question it answers: **does applying ColBERT-style late interaction scoring at every level of a RAPTOR hierarchical tree actually improve retrieval quality over simpler approaches?** Everything else is scaffolding to answer that question properly.
 
-### The 14 Pipelines
+### The 19 Pipelines (registry in `run_enhanced_benchmark.py`)
 
 #### Core Pipelines
 
@@ -56,7 +58,12 @@ The core question it answers: **does applying ColBERT-style late interaction sco
 | 11 | **Late Chunking** | Embed entire document through BERT first, THEN split token embeddings into chunks and pool. Preserves cross-chunk context that normal chunking destroys | Jina AI, 2024 |
 | 12 | **RAPTOR + Late Traversal** | Top-down greedy traversal: score root nodes with MaxSim, pick top-k, descend to children, repeat until leaves. More efficient than collapsed | Novel combination |
 | 13 | **Agentic Multi-Hop** | Template or LLM-based query decomposition → retrieve for each sub-query → aggregate scores across sub-queries | Agentic RAG, 2025 |
-| 14 | **Reflection Retriever** | Retrieve → evaluate context sufficiency (keyword coverage) → if insufficient, reformulate query → re-retrieve (up to 2 iterations). Self-RAG pattern | Self-RAG, Asai et al. 2023 |
+| 14 | **Reflection Retriever** | Retrieve → evaluate context sufficiency (keyword coverage over **real document text**, not doc IDs) → if insufficient, reformulate query → re-retrieve (up to 2 iterations). Self-RAG pattern | Self-RAG, Asai et al. 2023 |
+| 15 | **Graph Retrieval** | Build cosine-similarity document graph → label-propagation community detection → expand results with community members. Memory-safe blocked edge construction | LightRAG-style, 2024 |
+| 16 | **Two-Stage Dense + Reranker** | Dense top-100 → cross-encoder (ms-marco-MiniLM) rerank to top-10. The standard production architecture | Nogueira & Cho, 2019 |
+| 17 | **Approximate Late Interaction** | PLAID-style: FAISS K-means centroids → centroid-overlap candidate pruning → full MaxSim rerank. `compute_fidelity()` vs brute force | PLAID, SIGMOD 2023 |
+| 18 | **Contextual Dense** | Contextual chunking (Anthropic) → dense only | Anthropic, 2024 |
+| 19 | **Contextual BM25** | Contextual chunking → BM25 only | Anthropic, 2024 |
 
 #### Composition Modules
 
@@ -280,70 +287,75 @@ raven-retrieval/
 ├── configs/
 │   ├── scifact.yaml             # 5 pipelines, SciFact defaults
 │   ├── hotpotqa.yaml            # 4 pipelines, HotpotQA defaults
-│   └── full_ablation.yaml       # All 12 pipelines, comprehensive
+│   └── full_ablation.yaml       # Full registry, comprehensive
 ├── experiments/
 │   └── preregistration/
 │       └── template.md          # Pre-registered hypotheses template
 ├── src/
 │   ├── __init__.py
-│   ├── config.py                # Central config: 6 nested dataclasses, YAML/JSON support, dot-notation overrides
+│   ├── utils.py                 # SHARED: chunking, doc-score aggregation, RRF, timing, masking (kills 8x duplication)
+│   ├── config.py                # Central config: 7 nested dataclasses, YAML/JSON, dot-notation overrides, --max-docs/--colbert-checkpoint
 │   ├── encoder/
 │   │   ├── __init__.py
-│   │   └── colbert_encoder.py   # ColbertEncoder (162 lines) + ColbertContrastiveEncoder with contrastive/InfoNCE loss
+│   │   └── colbert_encoder.py   # ColbertEncoder + ColbertContrastiveEncoder (contrastive/InfoNCE) + batched masked encoding + checkpoint I/O
 │   ├── maxsim/
 │   │   ├── __init__.py
-│   │   ├── brute_force.py       # maxsim_score, brute_force_rank, maxsim_score_batch (numpy-only)
-│   │   ├── approximate.py       # CentroidIndex (FAISS K-means) + ApproximateMaxSim (PLAID-style)
-│   │   └── compression.py       # ResidualCompressor (30x compression) + CompressedCorpusIndex
+│   │   ├── brute_force.py       # maxsim_score, brute_force_rank, maxsim_score_batch, brute_force_rank_fast (1 matmul), pack_doc_embeddings
+│   │   ├── approximate.py       # CentroidIndex (FAISS K-means) + ApproximateMaxSim (PLAID-style, vectorized)
+│   │   └── compression.py       # ResidualCompressor (30x, vectorized) + CompressedCorpusIndex
 │   ├── raptor/
 │   │   ├── __init__.py
 │   │   ├── chunker.py           # TextChunker: fixed-size word chunks with overlap
 │   │   ├── clustering.py        # Two-step UMAP + GMM: global_local_cluster, soft_cluster, BIC selection
-│   │   ├── summarizer.py        # LLMSummarizer (BART/T5 + extractive fallback) + ExtractiveSummarizer (TF-IDF)
+│   │   ├── summarizer.py        # LLMSummarizer (BART/T5 + extractive fallback, no infinite retry) + ExtractiveSummarizer (TF-IDF)
 │   │   ├── tree.py              # TreeNode (token embeddings + pooled) + RaptorTree (traverse/collapse)
-│   │   └── builder.py           # RaptorBuilder: chunk → embed → cluster → summarize → repeat
+│   │   └── builder.py           # RaptorBuilder: chunk → embed → cluster → summarize → repeat (accepts shared model/summarizer)
 │   ├── combined/
 │   │   ├── __init__.py
-│   │   └── late_raptor.py       # LateInteractionRaptor: the novel RAPTOR + ColBERT MaxSim at every node
+│   │   └── late_raptor.py       # LateInteractionRaptor: novel RAPTOR + ColBERT MaxSim at every node (batched, mask-trimmed, fix)
 │   ├── baselines/
 │   │   ├── __init__.py          # Lazy imports via __getattr__ (avoids pulling torch when not needed)
-│   │   ├── dense.py             # DenseRetriever: SBERT → cosine, aggregate by doc
+│   │   ├── dense.py             # DenseRetriever: SBERT → cosine, aggregate by doc (model injection for tests)
 │   │   ├── hybrid.py            # HybridRetriever: BM25 + Dense + RRF
-│   │   ├── hyde.py              # HyDERetriever: TinyLlama or template fallback → embed hypothetical → retrieve
-│   │   ├── splade.py            # SPLADERetriever (MLM logits → sparse) + HybridSPLADERetriever (sparse + dense + RRF)
-│   │   ├── bm25_prf.py          # BM25PRFRetriever: Rocchio expansion, TF*IDF term weighting
-│   │   ├── contextual.py        # ContextualChunker + ContextualDenseRetriever + ContextualBM25Retriever + ContextualHybridRetriever
+│   │   ├── hyde.py              # HyDERetriever: TinyLlama (actually loads now) or template fallback → embed hypothetical → retrieve
+│   │   ├── splade.py            # SPLADERetriever (MLM logits → sparse, inverted index, batched) + HybridSPLADERetriever
+│   │   ├── bm25_prf.py          # BM25PRFRetriever: two-stage Rocchio PRF (weighted rerank of candidates only)
+│   │   ├── contextual.py        # ContextualChunker + Contextual(Dense|BM25|Hybrid)Retriever
 │   │   ├── late_chunking.py     # LateChunkingEncoder (embed full doc → split → pool) + LateChunkingRetriever
-│   │   ├── agentic.py           # QueryDecomposer + ReflectionRetriever + MultiHopRetriever
+│   │   ├── agentic.py           # QueryDecomposer + ReflectionRetriever (real text_lookup!) + MultiHopRetriever
 │   │   ├── reranker.py          # CrossEncoderReranker (ms-marco-MiniLM) + TwoStageRetriever
-│   │   └── graph_retrieval.py   # DocumentGraph (cosine edges + label propagation) + GraphRetriever
+│   │   └── graph_retrieval.py   # DocumentGraph (cosine edges + label propagation, memory-safe blocked) + GraphRetriever
 │   ├── eval/
 │   │   ├── __init__.py
-│   │   ├── datasets.py          # BEIR download/load/subsample
-│   │   ├── metrics.py           # run_beir_evaluation, compute_em_f1, measure_latency
+│   │   ├── datasets.py          # BEIR download/load/subsample + subsample_corpus (judged-doc-preserving)
+│   │   ├── metrics.py           # run_beir_evaluation + REAL per-query nDCG/recall/precision/map (numpy, trec_eval-compatible)
 │   │   ├── significance.py      # paired_bootstrap_test, paired_t_test, bonferroni_correction, run_all_pairwise_tests
-│   │   ├── ablation.py          # AblationRunner + collect_per_query_scores
+│   │   ├── ablation.py          # AblationRunner + collect_per_query_scores (now returns real values)
 │   │   ├── visualize.py         # SVG charts (bar, grouped bar, radar, scatter) + generate_dashboard (HTML)
 │   │   └── report.py            # generate_report (Markdown) with CLI entry point
 │   ├── training/
-│   │   └── train_colbert.py     # generate_triples_from_beir + train_colbert_encoder (AdamW, warmup+decay, InfoNCE)
+│   │   └── train_colbert.py     # generate_triples_from_beir (--hard-negatives via BM25) + train_colbert_encoder (InfoNCE)
 │   └── validation/
 │       └── cross_check.py       # ReferenceCrossValidator: our ColBERT vs ColBERTv2 (ragatouille), Spearman correlation
 ├── tests/
-│   ├── run_core_tests.py        # 22 tests, 39 assertions — NO torch required, runs instantly
-│   ├── test_maxsim.py           # 6 tests: scoring, ranking, batch, centroid index, approximate, fidelity
-│   ├── test_raptor.py           # 6 tests: chunker, UMAP, cluster count, soft cluster, tree ops, assignment rate
-│   ├── test_significance.py     # 5 tests: bootstrap known/no diff, t-test agreement, Bonferroni, pairwise
-│   └── test_integration.py      # 3 tests: pipeline wiring, tree flat retrieval, MaxSim end-to-end
-├── Makefile                     # make test, test-core, benchmark, benchmark-fast, benchmark-baselines, train-colbert, report, clean
-├── setup.py                     # pip install raven-retrieval[full,dev] with entry points
+│   ├── run_core_tests.py        # Core suite: numpy-only, runs in CI without torch
+│   ├── test_utils.py            # Shared utilities (chunking, aggregation, RRF, timer, masking)
+│   ├── test_metrics.py          # Per-query nDCG/recall/precision/map pinned against trec_eval semantics
+│   ├── test_pipelines_smoke.py  # DI-based contract tests for every retriever (run without torch/transformers)
+│   ├── test_maxsim.py           # scoring, ranking, batch, centroid index, approximate, fidelity (faiss-guarded)
+│   ├── test_raptor.py           # chunker, UMAP, cluster count, soft cluster, tree ops, assignment rate (umap-guarded)
+│   ├── test_significance.py     # bootstrap known/no diff, t-test agreement, Bonferroni, pairwise
+│   └── test_integration.py      # pipeline wiring, tree flat retrieval, MaxSim end-to-end
+├── run_enhanced_benchmark.py    # THE unified runner: 19-pipeline registry, shared models, honest timing, error capture
+├── Makefile                     # make test, test-core, benchmark, benchmark-fast, benchmark-baselines, benchmark-trained, train-colbert, report, clean
+├── setup.py                     # pip install raven-retrieval[full,dev] with entry points (v0.3.0)
 ├── requirements.txt             # torch, transformers, sentence-transformers, faiss-cpu, rank-bm25, umap-learn, scikit-learn, beir, scipy, numpy, tqdm
 ├── requirements-dev.txt         # pytest, flake8, mypy
 ├── requirements-validation.txt  # + ragatouille (for reference ColBERT cross-check)
 ├── README.md                    # This file
 ├── METHODOLOGY.md               # Research paper methodology: hypotheses, architecture, baselines, evaluation protocol
 ├── RESEARCH_NOTES.md            # Deep research on 11 topics: ColBERTv2/PLAID, SPLATE, MUVERA, RAPTOR improvements, SPLADE, HyDE, GraphRAG, Agentic RAG, Contextual Retrieval, Late Chunking, Token Pooling
-├── BENCHMARK_RESULTS.md         # Actual results + analysis + what went wrong + next steps
+├── BENCHMARK_RESULTS.md         # Actual results + analysis + what went wrong + next steps (honestly revised in v0.3)
 └── CONTRIBUTING.md              # How to add a new pipeline, code style, commit messages
 ```
 
@@ -385,42 +397,59 @@ make test
 ### Running Benchmarks
 
 ```bash
-# Fast benchmark (skip ColBERT and RAPTOR — good for CI or quick checks)
+# Fast benchmark (skip ColBERT/SPLADE/RAPTOR — good for CI or quick checks)
 make benchmark-fast
 # or: python run_enhanced_benchmark.py --dataset scifact --max-queries 100 --skip-heavy
 
 # Baselines only (dense, hybrid, BM25+PRF, contextual, hyde)
 make benchmark-baselines
 
-# Full benchmark (all 14 pipelines)
+# Full benchmark (all default pipelines)
 make benchmark
 # or: python run_enhanced_benchmark.py --dataset scifact --max-queries 100
 
-# Specific pipelines only
+# Specific pipelines only (from the 19-pipeline registry)
 python run_enhanced_benchmark.py --pipelines naive_dense hybrid_rag hyde bm25_prf
 
-# HotpotQA (needs >6GB RAM)
-python run_enhanced_benchmark.py --dataset hotpotqa --max-queries 50
+# HotpotQA on a low-RAM machine (corpus subsampled to 2000 docs;
+# judged docs are ALWAYS preserved so metrics stay valid)
+python run_enhanced_benchmark.py --dataset hotpotqa --max-queries 50 --max-docs 2000
 
-# Original benchmark script (core 3 + RAPTOR)
-python run_benchmark.py --dataset hotpotqa --max-queries 50
+# Tune ColBERT encoding batch size for your RAM
+python run_enhanced_benchmark.py --dataset scifact --encode-batch-size 8
 
-# Multi-dataset full ablation
-python run_full_benchmark.py
+# List every available pipeline
+python run_enhanced_benchmark.py --help   # see the --pipelines choices
+
+# Generate a Markdown report from the latest run
+make report
 ```
+
+> The two old divergent runners (`run_benchmark.py`, `run_full_benchmark.py`)
+> were removed in v0.3.0 — one of them mixed single-vector tree embeddings
+> with MaxSim scoring and could only crash. Everything routes through
+> `run_enhanced_benchmark.py` now (one runner, one shared SBERT/ColBERT/BART
+> instance across all pipelines — see "Memory" notes in the runner docstring).
 
 ### Training ColBERT
 
 ```bash
-# Generate triples from BEIR and train
+# Generate triples from BEIR and train (untrained projection is the #1
+# reason late interaction underperforms dense — this fixes it)
 make train-colbert
 # or: python -m src.training.train_colbert --beir-dataset scifact --epochs 3
+
+# Hard-negative mining via BM25 (stronger training signal than random negatives)
+python -m src.training.train_colbert --beir-dataset scifact --epochs 5 --hard-negatives
 
 # From pre-generated triples
 python -m src.training.train_colbert --triples data/triples.jsonl --epochs 5
 
-# Custom settings
-python -m src.training.train_colbert --beir-dataset scifact --epochs 5 --batch-size 16 --lr 1e-5
+# Then benchmark WITH the trained encoder:
+make benchmark-trained
+# or:
+python run_enhanced_benchmark.py --dataset scifact --max-queries 100 \
+    --colbert-checkpoint checkpoints/final_model.pt
 ```
 
 ### Generating Reports
@@ -552,19 +581,19 @@ See [`RESEARCH_NOTES.md`](RESEARCH_NOTES.md) for detailed technical analysis of 
 
 ## Known Limitations
 
-1. **Encoder not trained on retrieval triples.** The ColBERT projection head is Xavier-initialized, not trained on (query, positive, negative) triples. This hurts late interaction quality vs fully-trained SBERT. Fix: `make train-colbert` to fine-tune on BEIR data.
+1. **Encoder not trained on retrieval triples (addressable).** The ColBERT projection head is Xavier-initialized by default, which hurts late interaction quality vs fully-trained SBERT. **Fix:** `make train-colbert` (add `--hard-negatives` for BM21-mined hard negatives), then `--colbert-checkpoint checkpoints/final_model.pt` to the benchmark runner. This is the single biggest quality lever for late interaction.
 
-2. **Soft-clustering ≈ hard assignment on short docs.** With short chunks (~100 tokens), the GMM soft assignments tend to converge to near-hard assignments. Measured via `compute_soft_assignment_rate()`.
+2. **Soft-clustering ≈ hard assignment on short docs.** With short chunks (~100 tokens), the GMM soft assignments tend to converge to near-hard assignments. Measured via `compute_soft_assignment_rate()`. Matches the Stanford CS224N RAPTOR reproduction.
 
-3. **RAPTOR summarizer may use extractive fallback.** If BART fails to load (transformers version issues, memory constraints), automatically falls back to TF-IDF extractive summarization. Works fine but lower quality.
+3. **RAPTOR summarizer may use extractive fallback.** If BART fails to load (transformers version issues, memory constraints), falls back to TF-IDF extractive summarization. A `_load_failed` flag prevents the infinite-retry bug; the fallback is logged so tree quality is honestly attributable.
 
-4. **SPLADE is slow on CPU.** Each document requires a full BERT MLM forward pass. On CPU, expect ~10x slower indexing vs SBERT. Use GPU for reasonable speed.
+4. **SPLADE is slow on CPU.** Each chunk requires a BERT MLM forward pass (now batched). Use GPU, or accept that indexing takes longer than SBERT.
 
 5. **Late Chunking limited by context window.** Standard BERT caps at 512 tokens, so the "full document" is actually truncated. Needs a long-context embedding model (Jina-embeddings-v2, etc.) to realize the full benefit.
 
-6. **HotpotQA needs >6GB RAM.** The 5.2M document corpus exceeds 6GB when encoded with SBERT. Needs subsampling, streaming encoding, or a machine with more RAM.
+6. **HotpotQA needs >6GB RAM (addressable).** The 5.2M-document corpus exceeds 6GB when encoded with SBERT. **Fix:** `--max-docs 2000` subsamples the corpus while *always preserving judged documents* so every metric stays valid. The unified runner also reuses one SBERT/ColBERT/BART instance across all pipelines (critical on a 4-8GB machine).
 
-7. **Per-query NDCG variance is zero on SciFact.** Known BEIR evaluation artifact where the qrels structure produces uniform per-query NDCG. Bootstrap/t-test still run but results reflect evaluation granularity, not necessarily identical system quality.
+7. **Per-query significance requires the numpy implementation.** BEIR's `EvaluateRetrieval.evaluate()` returns corpus-averaged floats, not a per-query dict — using it for per-query scores (the v0.2 bug) silently produces all-zero arrays and meaningless p-values. v0.3 computes per-query nDCG in pure numpy (trec_eval-compatible), pinned by `tests/test_metrics.py`.
 
 ---
 

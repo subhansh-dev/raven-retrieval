@@ -22,17 +22,35 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 
-def generate_triples_from_beir(corpus, queries, qrels, max_triples=10000, seed=42):
+def generate_triples_from_beir(corpus, queries, qrels, max_triples=10000, seed=42,
+                              hard_negatives=False, hard_negative_k=50):
     """Generate (query, positive_doc, negative_doc) triples from BEIR data.
 
     Positive: documents with relevance judgment > 0
-    Negative: random non-relevant documents (hard negatives)
+    Negative:
+      - random non-relevant documents (default), OR
+      - hard negatives (when hard_negatives=True): BM25 top-k non-relevant
+        documents for the query — closer to positive territory, so the
+        contrastive loss has a stronger signal. This is standard practice
+        for training ColBERT-family encoders and meaningfully improves
+        late-interaction quality vs random negatives.
     """
     rng = np.random.RandomState(seed)
     triples = []
-
-    # Build corpus lookup
     all_doc_ids = list(corpus.keys())
+
+    # Optional BM25 index for hard-negative mining
+    bm25 = None
+    tokenized_corpus = None
+    if hard_negatives:
+        try:
+            from rank_bm25 import BM25Okapi
+            logger.info("Building BM25 index for hard-negative mining...")
+            tokenized_corpus = [((corpus[d].get("title", "") + " " + corpus[d].get("text", ""))
+                                  .lower().split()) for d in all_doc_ids]
+            bm25 = BM25Okapi(tokenized_corpus)
+        except ImportError:
+            logger.warning("rank_bm25 not installed — falling back to random negatives")
 
     for qid, relevant_docs in qrels.items():
         if qid not in queries:
@@ -40,23 +58,26 @@ def generate_triples_from_beir(corpus, queries, qrels, max_triples=10000, seed=4
 
         query_text = queries[qid]
         pos_doc_ids = [did for did, score in relevant_docs.items() if score > 0]
-
         if not pos_doc_ids:
             continue
 
-        # Sample negatives
-        neg_candidates = [did for did in all_doc_ids if did not in relevant_docs]
+        # Negative candidate generation
+        if bm25 is not None:
+            scores = bm25.get_scores(query_text.lower().split())
+            order = np.argsort(scores)[::-1]
+            neg_candidates = [all_doc_ids[i] for i in order
+                              if all_doc_ids[i] not in relevant_docs][:hard_negative_k]
+        else:
+            neg_candidates = [did for did in all_doc_ids if did not in relevant_docs]
+
         if not neg_candidates:
             continue
 
         for pos_id in pos_doc_ids[:3]:  # Limit positives per query
             neg_id = rng.choice(neg_candidates)
 
-            pos_doc = corpus[pos_id]
-            neg_doc = corpus[neg_id]
-
-            pos_text = (pos_doc.get("title", "") + " " + pos_doc.get("text", "")).strip()
-            neg_text = (neg_doc.get("title", "") + " " + neg_doc.get("text", "")).strip()
+            pos_text = (corpus[pos_id].get("title", "") + " " + corpus[pos_id].get("text", "")).strip()
+            neg_text = (corpus[neg_id].get("title", "") + " " + corpus[neg_id].get("text", "")).strip()
 
             triples.append({
                 "query": query_text,
@@ -210,6 +231,8 @@ def main():
     parser.add_argument("--output-dir", default="./checkpoints")
     parser.add_argument("--encoder-model", default="bert-base-uncased")
     parser.add_argument("--projection-dim", type=int, default=128)
+    parser.add_argument("--hard-negatives", action="store_true",
+                        help="Mine hard negatives via BM25 (stronger training signal).")
     args = parser.parse_args()
 
     # Import here to avoid torch dependency at module level
@@ -236,6 +259,7 @@ def main():
         triples = generate_triples_from_beir(
             corpus, queries, qrels,
             max_triples=args.max_triples,
+            hard_negatives=args.hard_negatives,
         )
         logger.info(f"Generated {len(triples)} triples")
 

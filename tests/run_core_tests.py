@@ -325,6 +325,55 @@ def test_centroid_index():
         print("  ⚠️  faiss not available, skipping centroid tests")
 
 
+# ── Fast batched MaxSim (new in 0.3.0) ────────────────────────────────
+
+def test_maxsim_rank_fast():
+    from src.maxsim.brute_force import pack_doc_embeddings, brute_force_rank_fast, brute_force_rank
+    rng = np.random.RandomState(0)
+    q = rng.randn(4, 16).astype(np.float32)
+    docs = [rng.randn(rng.randint(5, 12), 16).astype(np.float32) for _ in range(20)]
+    flat, lengths = pack_doc_embeddings(docs)
+    fast = brute_force_rank_fast(q, flat, lengths, top_k=5)
+    slow = brute_force_rank(q, docs, top_k=5)
+    # Fast path must produce identical ranking to the loop-based path
+    assert [i for i, _ in fast] == [i for i, _ in slow], "fast/slow rankings disagree"
+    assert all(fast[i][1] >= fast[i + 1][1] for i in range(len(fast) - 1)), "not sorted desc"
+
+
+# ── Imports of numpy-only utils/metrics test functions (new in 0.3.0) ───
+# Kept in separate files for clarity but surfaced here so the lightweight
+# CI job (numpy/scipy/sklearn only) exercises the per-query-significance
+# correctness invariants and the shared utilities.
+
+import importlib.util as _importlib_util
+
+def _load_tests_from(module_name, file_basename):
+    path = os.path.join(os.path.dirname(__file__), file_basename)
+    spec = _importlib_util.spec_from_file_location(module_name, path)
+    module = _importlib_util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_specs = _load_tests_from("utlls", "test_utils.py")
+test_utils_chunk_text = _specs.test_chunk_text_basic
+test_utils_chunk_corpus = _specs.test_chunk_corpus_id_format
+test_utils_aggregate_doc_scores = _specs.test_aggregate_doc_scores_max_pool
+test_utils_reciprocal_rank_fusion = _specs.test_reciprocal_rank_fusion
+test_utils_masked_mean_pool = _specs.test_masked_mean_pool
+test_utils_pipeline_timer = _specs.test_pipeline_timer_separates_phases
+
+_mtres = _load_tests_from("metrics", "test_metrics.py")
+test_metrics_ndcg_perfect = _mtres.test_ndcg_per_query_perfect_ranking_is_one
+test_metrics_ndcg_discount = _mtres.test_ndcg_discount_matches_trec_eval
+test_metrics_recall = _mtres.test_recall_per_query
+test_metrics_precision = _mtres.test_precision_per_query
+test_metrics_map = _mtres.test_map_per_query
+test_metrics_collect_per_query_aligned = _mtres.test_collect_per_query_ndcg_aligns_to_qrels_keys
+test_metrics_no_relevant_excluded = _mtres.test_no_relevant_docs_excluded
+test_metrics_evaluate_internal_structure = _mtres.test_evaluate_internal_structure
+
+
 # ── Main ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -356,6 +405,24 @@ if __name__ == "__main__":
         ("report", test_report),
         ("query_decomposition", test_query_decomposition),
         ("centroid_index", test_centroid_index),
+        # ── new in 0.3.0: pure-numpy utils + metrics (the correctness
+        # invariants for the per-query significance fix) ──
+        ("utils_chunk_text", test_utils_chunk_text),
+        ("utils_chunk_corpus", test_utils_chunk_corpus),
+        ("utils_aggregate_doc_scores", test_utils_aggregate_doc_scores),
+        ("utils_reciprocal_rank_fusion", test_utils_reciprocal_rank_fusion),
+        ("utils_masked_mean_pool", test_utils_masked_mean_pool),
+        ("utils_pipeline_timer", test_utils_pipeline_timer),
+        ("metrics_ndcg_perfect", test_metrics_ndcg_perfect),
+        ("metrics_ndcg_discount", test_metrics_ndcg_discount),
+        ("metrics_recall", test_metrics_recall),
+        ("metrics_precision", test_metrics_precision),
+        ("metrics_map", test_metrics_map),
+        ("metrics_collect_per_query_aligned", test_metrics_collect_per_query_aligned),
+        ("metrics_no_relevant_excluded", test_metrics_no_relevant_excluded),
+        ("metrics_evaluate_internal_structure", test_metrics_evaluate_internal_structure),
+        # ── new: fast batched MaxSim ──
+        ("maxsim_rank_fast", test_maxsim_rank_fast),
     ]
 
     for name, fn in tests:

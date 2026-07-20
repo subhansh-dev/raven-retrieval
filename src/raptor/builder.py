@@ -10,9 +10,16 @@ from .summarizer import LLMSummarizer
 class RaptorBuilder:
 
     def __init__(self, embedding_model_name="all-MiniLM-L6-v2", summarizer_model="facebook/bart-large-cnn",
-                 chunk_size=100, soft_threshold=0.1, min_cluster_size=3, use_extractive_fallback=True):
-        self.embedding_model = SentenceTransformer(embedding_model_name)
-        self.summarizer = LLMSummarizer(model_name=summarizer_model, fallback_to_extractive=use_extractive_fallback)
+                 chunk_size=100, soft_threshold=0.1, min_cluster_size=3, use_extractive_fallback=True,
+                 embedding_model=None, summarizer=None):
+        if embedding_model is not None:
+            self.embedding_model = embedding_model  # shared instance (memory-critical on small machines)
+        else:
+            self.embedding_model = SentenceTransformer(embedding_model_name)
+        if summarizer is not None:
+            self.summarizer = summarizer
+        else:
+            self.summarizer = LLMSummarizer(model_name=summarizer_model, fallback_to_extractive=use_extractive_fallback)
         self.chunker = TextChunker(chunk_size=chunk_size)
         self.soft_threshold = soft_threshold
         self.min_cluster_size = min_cluster_size

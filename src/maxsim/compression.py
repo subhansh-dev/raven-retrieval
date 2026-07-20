@@ -99,8 +99,15 @@ class ResidualCompressor:
         residual = normalized * range_vals + self.residual_min
         return residual
 
+    def _assign_centroids(self, tokens):
+        """Assign each token to its nearest centroid (vectorized via ||a-b||² expansion)."""
+        centroid_sq = (self.centroids ** 2).sum(axis=1)
+        token_sq = (tokens ** 2).sum(axis=1, keepdims=True)
+        dists_sq = token_sq + centroid_sq[None, :] - 2.0 * (tokens @ self.centroids.T)
+        return np.argmin(dists_sq, axis=1)
+
     def compress_document(self, token_embeddings):
-        """Compress a document's token embeddings.
+        """Compress a document's token embeddings. Vectorized.
 
         Returns:
             centroid_ids: array of centroid indices (1 byte each)
@@ -114,36 +121,24 @@ class ResidualCompressor:
 
         token_embeddings = token_embeddings.astype(np.float32)
 
-        # Assign to nearest centroid
-        centroid_ids = []
-        quantized_residuals = []
+        centroid_ids = self._assign_centroids(token_embeddings)
+        residuals = token_embeddings - self.centroids[centroid_ids]
+        quantized_residuals = self._quantize_residual(residuals)
 
-        for token in token_embeddings:
-            dists = np.linalg.norm(self.centroids - token, axis=1)
-            cid = np.argmin(dists)
-            residual = token - self.centroids[cid]
-            quantized = self._quantize_residual(residual)
-
-            centroid_ids.append(cid)
-            quantized_residuals.append(quantized)
-
-        return np.array(centroid_ids, dtype=np.uint8), np.array(quantized_residuals, dtype=np.uint8)
+        return centroid_ids.astype(np.uint8), quantized_residuals.astype(np.uint8)
 
     def decompress_document(self, centroid_ids, quantized_residuals):
-        """Decompress back to approximate token embeddings.
+        """Decompress back to approximate token embeddings. Vectorized.
 
         Returns: approximate token embeddings (centroid + dequantized residual)
         """
         if not self._fitted:
             raise RuntimeError("Call fit() first")
 
-        embeddings = []
-        for cid, qres in zip(centroid_ids, quantized_residuals):
-            residual = self._dequantize_residual(qres)
-            embedding = self.centroids[cid] + residual
-            embeddings.append(embedding)
-
-        return np.array(embeddings, dtype=np.float32)
+        centroid_ids = np.asarray(centroid_ids)
+        quantized_residuals = np.asarray(quantized_residuals)
+        residuals = self._dequantize_residual(quantized_residuals)
+        return (self.centroids[centroid_ids] + residuals).astype(np.float32)
 
     def compute_compression_ratio(self, original_dim, max_tokens=256):
         """Compute storage savings.
@@ -214,20 +209,20 @@ class CompressedCorpusIndex:
                     f"{len(self.centroid_to_docs)} unique centroids")
 
     def search_centroids(self, query_embeddings, top_centroids=10):
-        """Find top-k centroids closest to query tokens.
+        """Find top-k centroids closest to query tokens. Vectorized.
 
         This is the cheap first stage of PLAID-style search.
         """
         if query_embeddings.ndim == 3:
             query_embeddings = query_embeddings.squeeze(0)
 
-        query_centroids = set()
-        for token in query_embeddings:
-            dists = np.linalg.norm(self.compressor.centroids - token, axis=1)
-            top_cids = np.argsort(dists)[:top_centroids]
-            query_centroids.update(top_cids.tolist())
-
-        return query_centroids
+        centroids = self.compressor.centroids
+        centroid_sq = (centroids ** 2).sum(axis=1)
+        query_sq = (query_embeddings ** 2).sum(axis=1, keepdims=True)
+        dists_sq = query_sq + centroid_sq[None, :] - 2.0 * (query_embeddings @ centroids.T)
+        top_centroids = min(top_centroids, centroids.shape[0])
+        top_indices = np.argsort(dists_sq, axis=1)[:, :top_centroids]
+        return set(top_indices.flatten().tolist())
 
     def retrieve(self, query_embeddings, top_k=10, top_centroids=10):
         """Retrieve using PLAID-style two-stage search.

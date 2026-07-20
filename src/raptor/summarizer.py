@@ -24,10 +24,12 @@ class LLMSummarizer:
         self._tokenizer = None
         self._device = device
         self._use_extractive = False
+        self._load_attempted = False  # prevents retrying a failed load forever
 
     def _load_model(self):
-        if self._model is not None:
+        if self._model is not None or self._load_attempted:
             return
+        self._load_attempted = True
         try:
             from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
             import torch
@@ -47,6 +49,7 @@ class LLMSummarizer:
 
         except Exception as e:
             logger.warning(f"Failed to load {self.model_name}: {e}")
+            self._model = None
             if self.fallback_to_extractive:
                 logger.info("Falling back to extractive summarization")
                 self._use_extractive = True

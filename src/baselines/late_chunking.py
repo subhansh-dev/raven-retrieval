@@ -31,11 +31,14 @@ class LateChunkingEncoder:
     """
 
     def __init__(self, model_name="bert-base-uncased", chunk_size_tokens=128,
-                 max_doc_length=2048, pooling="mean"):
+                 max_doc_length=2048, pooling="mean", model=None, tokenizer=None):
         from transformers import AutoTokenizer, AutoModel
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModel.from_pretrained(model_name, torch_dtype=torch.float32)
+        if model is not None and tokenizer is not None:
+            self.model, self.tokenizer = model, tokenizer  # dependency injection for tests
+        else:
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            self.model = AutoModel.from_pretrained(model_name, torch_dtype=torch.float32)
 
         if torch.cuda.is_available():
             self.model = self.model.to("cuda")

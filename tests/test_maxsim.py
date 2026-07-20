@@ -1,7 +1,7 @@
 import sys
 import os
 import numpy as np
-import torch
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -41,6 +41,7 @@ def test_maxsim_batch():
 
 
 def test_centroid_index():
+    faiss = pytest.importorskip("faiss")
     rng = np.random.RandomState(42)
     tokens = rng.randn(100, 8).astype(np.float32)
     index = CentroidIndex(num_centroids=4)
@@ -53,6 +54,7 @@ def test_centroid_index():
 
 
 def test_approximate_maxsim():
+    pytest.importorskip("faiss")
     rng = np.random.RandomState(42)
     dim = 8
     all_tokens = rng.randn(200, dim).astype(np.float32)
@@ -68,6 +70,7 @@ def test_approximate_maxsim():
 
 
 def test_approximate_fidelity():
+    pytest.importorskip("faiss")
     rng = np.random.RandomState(42)
     dim = 8
     all_tokens = rng.randn(200, dim).astype(np.float32)
