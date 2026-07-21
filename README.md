@@ -305,113 +305,97 @@ Tests by module:
   test_utils.py           15/15 passed (chunking, aggregation, RRF, timer, masking, L2 normalize)
 ```
 
-### SciFact (BEIR) — v0.3.0 Benchmark Run
+### SciFact (BEIR) — v0.3.0 Benchmark Run (100 queries, Google Colab T4)
 
-**Run ID:** `enhanced_scifact_1784579644`
+**Run ID:** `enhanced_scifact_1784635462`
 **Date:** 2026-07-21
-**Hardware:** x86_64 CPU, ~6GB RAM, no GPU
-**Python:** 3.12.3 | **PyTorch:** 2.13.0+cpu | **Transformers:** 5.14.1
-**Dataset:** SciFact (BEIR) — 500 docs subsampled (judged docs preserved), 10 queries, top-10
+**Hardware:** Google Colab T4 GPU (15.6 GB VRAM)
+**Python:** 3.12 | **PyTorch:** 2.11.0+cu128 | **CUDA:** 12.8
+**Dataset:** SciFact (BEIR) — full corpus, 100 queries, top-10
 **Seed:** 42 (numpy + torch)
 
 #### nDCG Scores (Normalized Discounted Cumulative Gain)
 
 | Pipeline | nDCG@1 | nDCG@3 | nDCG@5 | nDCG@10 | nDCG@100 |
 |---|---|---|---|---|---|
-| **🥇 HyDE** | **1.0000** | **1.0000** | **1.0000** | **1.0000** | **1.0000** |
-| **🥈 Naive Dense RAG** | 0.9000 | 0.9631 | 0.9631 | 0.9631 | 0.9631 |
-| **🥉 Contextual Hybrid** | 0.8000 | 0.8000 | 0.8000 | 0.8690 | 0.8690 |
-| **Hybrid RAG (BM25+Dense)** | 0.8000 | 0.8000 | 0.8000 | 0.8672 | 0.8672 |
-| **BM25 + Rocchio PRF** | 0.6000 | 0.6631 | 0.7018 | 0.7018 | 0.7018 |
+| **🥇 HyDE** | 0.5300 | 0.6536 | 0.6855 | **0.7119** | 0.7119 |
+| **🥈 Naive Dense RAG** | 0.5100 | 0.6349 | 0.6741 | 0.6964 | 0.6964 |
+| **🥉 Contextual Hybrid** | 0.5500 | 0.6223 | 0.6501 | 0.6823 | 0.6823 |
+| **Hybrid RAG (BM25+Dense)** | 0.5100 | 0.6122 | 0.6290 | 0.6668 | 0.6668 |
+| **BM25 + Rocchio PRF** | 0.3400 | 0.4549 | 0.5092 | 0.5285 | 0.5285 |
 
 #### MAP Scores (Mean Average Precision)
 
 | Pipeline | MAP@1 | MAP@3 | MAP@5 | MAP@10 | MAP@100 |
 |---|---|---|---|---|---|
-| **HyDE** | **1.0000** | **1.0000** | **1.0000** | **1.0000** | **1.0000** |
-| **Naive Dense RAG** | 0.9000 | 0.9500 | 0.9500 | 0.9500 | 0.9500 |
-| **Contextual Hybrid** | 0.8000 | 0.8000 | 0.8000 | 0.8310 | 0.8310 |
-| **Hybrid RAG** | 0.8000 | 0.8000 | 0.8000 | 0.8292 | 0.8292 |
-| **BM25 + Rocchio PRF** | 0.6000 | 0.6500 | 0.6700 | 0.6700 | 0.6700 |
+| **HyDE** | 0.5233 | 0.6214 | 0.6404 | **0.6514** | 0.6514 |
+| **Naive Dense RAG** | 0.5033 | 0.6022 | 0.6252 | 0.6345 | 0.6345 |
+| **Contextual Hybrid** | 0.5433 | 0.6033 | 0.6178 | 0.6317 | 0.6317 |
+| **Hybrid RAG** | 0.4983 | 0.5825 | 0.5920 | 0.6081 | 0.6081 |
+| **BM25 + Rocchio PRF** | 0.3300 | 0.4236 | 0.4544 | 0.4633 | 0.4633 |
 
 #### Recall Scores
 
 | Pipeline | Recall@1 | Recall@3 | Recall@5 | Recall@10 | Recall@100 |
 |---|---|---|---|---|---|
-| **HyDE** | **1.0000** | **1.0000** | **1.0000** | **1.0000** | **1.0000** |
-| **Naive Dense RAG** | 0.9000 | **1.0000** | **1.0000** | **1.0000** | **1.0000** |
-| **Contextual Hybrid** | 0.8000 | 0.8000 | 0.8000 | **1.0000** | **1.0000** |
-| **Hybrid RAG** | 0.8000 | 0.8000 | 0.8000 | **1.0000** | **1.0000** |
-| **BM25 + Rocchio PRF** | 0.6000 | 0.7000 | 0.8000 | 0.8000 | 0.8000 |
+| **HyDE** | 0.5233 | 0.7367 | 0.8117 | **0.8900** | 0.8900 |
+| **Naive Dense RAG** | 0.5033 | 0.7217 | 0.8150 | 0.8800 | 0.8800 |
+| **Contextual Hybrid** | 0.5433 | 0.6683 | 0.7333 | 0.8317 | 0.8317 |
+| **Hybrid RAG** | 0.4983 | 0.6883 | 0.7283 | 0.8383 | 0.8383 |
+| **BM25 + Rocchio PRF** | 0.3300 | 0.5333 | 0.6633 | 0.7183 | 0.7183 |
 
 #### Precision Scores
 
 | Pipeline | P@1 | P@3 | P@5 | P@10 | P@100 |
 |---|---|---|---|---|---|
-| **HyDE** | **1.0000** | 0.3333 | 0.2000 | 0.1000 | 0.0100 |
-| **Naive Dense RAG** | 0.9000 | 0.3333 | 0.2000 | 0.1000 | 0.0100 |
-| **Contextual Hybrid** | 0.8000 | 0.2667 | 0.1600 | 0.1000 | 0.0100 |
-| **Hybrid RAG** | 0.8000 | 0.2667 | 0.1600 | 0.1000 | 0.0100 |
-| **BM25 + Rocchio PRF** | 0.6000 | 0.2333 | 0.1600 | 0.0800 | 0.0080 |
+| **HyDE** | 0.5300 | 0.2533 | 0.1680 | 0.0940 | 0.0094 |
+| **Naive Dense RAG** | 0.5100 | 0.2500 | 0.1700 | 0.0930 | 0.0093 |
+| **Contextual Hybrid** | 0.5500 | 0.2300 | 0.1540 | 0.0880 | 0.0088 |
+| **Hybrid RAG** | 0.5100 | 0.2367 | 0.1500 | 0.0880 | 0.0088 |
+| **BM25 + Rocchio PRF** | 0.3400 | 0.1867 | 0.1400 | 0.0770 | 0.0077 |
 
 #### Latency (Index + Query Time)
 
-| Pipeline | Index Time | Query Time | Total Time | Per-Query Latency |
-|---|---|---|---|---|
-| **BM25 + Rocchio PRF** | **0.07s** | **0.04s** | **0.10s** | **3.7ms** |
-| **HyDE** | 25.64s | 0.17s | 25.82s | 17.4ms |
-| **Contextual Hybrid** | 26.17s | 0.22s | 26.39s | 22.4ms |
-| **Hybrid RAG** | 26.89s | 0.17s | 27.06s | 17.0ms |
-| **Naive Dense RAG** | 27.37s | 0.13s | 27.49s | 12.6ms |
+| Pipeline | Index Time | Query Time | Per-Query Latency |
+|---|---|---|---|
+| **BM25 + Rocchio PRF** | **1.2s** | **4.3s** | **43.0ms** |
+| **Naive Dense RAG** | 24.4s | 3.2s | 32.0ms |
+| **HyDE** | 27.0s | 1.9s | 19.0ms |
+| **Hybrid RAG** | 25.2s | 8.7s | 87.0ms |
+| **Contextual Hybrid** | 28.3s | 9.3s | 93.0ms |
 
-#### Per-Query nDCG@10 Detail
+#### Per-Query nDCG@10 Summary
 
-| Query # | Naive Dense | Hybrid RAG | BM25 PRF | Contextual Hybrid | HyDE |
-|---|---|---|---|---|---|
-| Q1 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| Q2 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| Q3 | 1.0000 | 1.0000 | 0.6309 | 1.0000 | 1.0000 |
-| Q4 | 1.0000 | 0.3562 | 0.0000 | 0.3333 | 1.0000 |
-| Q5 | 1.0000 | 1.0000 | 0.3869 | 1.0000 | 1.0000 |
-| Q6 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| Q7 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| Q8 | 0.6309 | 0.3155 | 0.0000 | 0.3333 | 1.0000 |
-| Q9 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| Q10 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| **Mean** | **0.9631** | **0.8672** | **0.7018** | **0.8690** | **1.0000** |
+With 100 queries (vs 10 in the earlier run), we get much more reliable averages. The earlier 10-query run showed HyDE at a perfect 1.0 — that was a small-sample artifact. The real picture on100 queries is more nuanced and more honest.
 
 #### Statistical Significance (Paired Bootstrap + t-test, Bonferroni-corrected)
 
 | Comparison | Observed Δ | Bootstrap p | t-test p | Bonferroni Sig? |
 |---|---|---|---|---|
-| Naive Dense vs Hybrid RAG | +0.096 | 0.107 | 0.195 | ❌ No |
-| Naive Dense vs BM25 PRF | +0.261 | 0.007 | 0.052 | ❌ No |
-| Naive Dense vs Contextual Hybrid | +0.096 | 0.107 | 0.201 | ❌ No |
-| Naive Dense vs HyDE | −0.037 | 0.359 | 0.343 | ❌ No |
-| Hybrid RAG vs BM25 PRF | +0.165 | 0.007 | 0.047 | ❌ No |
-| Hybrid RAG vs Contextual Hybrid | +0.001 | 0.458 | 0.873 | ❌ No |
-| Hybrid RAG vs HyDE | −0.133 | 0.107 | 0.168 | ❌ No |
-| BM25 PRF vs Contextual Hybrid | −0.165 | 0.007 | 0.047 | ❌ No |
-| BM25 PRF vs HyDE | −0.298 | 0.007 | 0.053 | ❌ No |
-| Contextual Hybrid vs HyDE | −0.133 | 0.107 | 0.168 | ❌ No |
+| Naive Dense vs BM25 PRF | +0.168 | 0.0000 | 0.0000 | ✅ **Yes** |
+| Hybrid RAG vs BM25 PRF | +0.141 | 0.0000 | 0.0000 | ✅ **Yes** |
+| BM25 PRF vs Contextual Hybrid | −0.170 | 0.0000 | 0.0000 | ✅ **Yes** |
+| BM25 PRF vs HyDE | −0.183 | 0.0000 | 0.0000 | ✅ **Yes** |
+| Naive Dense vs Hybrid RAG | +0.027 | 0.1423 | 0.2761 | ❌ No |
+| Naive Dense vs Contextual Hybrid | −0.002 | 0.4634 | 0.9424 | ❌ No |
+| Naive Dense vs HyDE | −0.016 | 0.1253 | 0.2704 | ❌ No |
+| Hybrid RAG vs Contextual Hybrid | −0.029 | 0.0193 | 0.0546 | ❌ No |
+| Hybrid RAG vs HyDE | −0.042 | 0.0601 | 0.1240 | ❌ No |
+| Contextual Hybrid vs HyDE | −0.014 | 0.3186 | 0.6323 | ❌ No |
 
-> **Note:** With only 10 queries, statistical power is limited. After Bonferroni correction (α=0.05/10=0.005), no pairwise comparison reaches significance. The BM25 PRF vs Dense/Hybrid differences (bootstrap p=0.007) are near the threshold. A full 100-query run would provide more power.
+> With 100 queries, we finally have real statistical power. BM25 PRF is significantly worse than every other pipeline (p≈0.000, survives Bonferroni correction). The top 4 pipelines (HyDE, Dense, Contextual, Hybrid) are statistically indistinguishable from each other.
 
 ### What These Numbers Mean
 
-**HyDE achieved perfect scores (nDCG@10 = 1.0).** On these 10 SciFact queries, generating a hypothetical answer before retrieval bridged the semantic gap perfectly — every relevant document was ranked at the top. This is partly a small-sample effect (10 queries), but the direction is consistent with HyDE's design thesis.
+**HyDE wins, but not by much (nDCG@10 = 0.712).** The earlier10-query run showed HyDE at a perfect 1.0 — that was small-sample luck. On100 queries, HyDE still comes out on top, but only ~2 points above Naive Dense. The hypothetical document approach genuinely helps bridge the query-document semantic gap, even with simple templates instead of an LLM.
 
-**Naive Dense RAG came in strong (nDCG@10 = 0.96).** SciFact is single-hop scientific claim verification — exactly the kind of task where SBERT's semantic similarity shines. Dense retrieval is hard to beat on well-formed scientific queries.
+**Naive Dense RAG is surprisingly competitive (nDCG@10 = 0.696).** Don't sleep on the basics. SBERT with cosine similarity on well-chunked text is hard to beat for single-hop scientific claims. It's also the second-fastest to query.
 
-**Contextual Hybrid ≈ Hybrid RAG (0.87 vs 0.87).** Adding document context prefixes to chunks before BM25+dense fusion had minimal impact on SciFact. Makes sense — scientific abstracts are already self-contained; the "lost in the middle" problem context enrichment addresses is more relevant for long documents.
+**Contextual Hybrid ≈ Hybrid ≈ Dense.** All three are within ~3 points of each other and statistically indistinguishable. Adding Anthropic-style context prefixes to chunks didn't move the needle on SciFact — scientific abstracts are already self-contained, so the "lost in the middle" problem these techniques address just doesn't apply here.
 
-**BM25 + Rocchio PRF was weakest (nDCG@10 = 0.70).** Pseudo-relevance feedback with query expansion via TF-IDF terms added noise on these scientific queries. BM25's lexical matching without semantic understanding struggles with the precise terminology of scientific claims.
+**BM25 + Rocchio PRF is significantly worse (nDCG@10 = 0.529).** This is the only pipeline with real statistical evidence against it — p≈0.000 against every other method, surviving Bonferroni correction. TF-IDF query expansion actively hurts on precise scientific terminology. The expansion terms add noise, not signal.
 
-**Late Interaction couldn't run in this batch** (ColBERT encoder not included in --skip-heavy). The untrained projection head is the #1 quality bottleneck — `make train-colbert` + `--colbert-checkpoint` is the fix.
-
-**RAPTOR pipelines couldn't run in this batch** (also skipped as heavy). They need BART summarizer + UMAP clustering, which requires more time and RAM.
-
-**Latency tells a different story.** BM25 PRF is 260x faster to index (no neural encoding) and 3-6x faster to query. For applications where speed matters more than accuracy, it's a valid choice.
+**Latency is a different conversation.** BM25 PRF indexes in1.2 seconds (no neural encoding). The neural pipelines take25-28 seconds to index. If you're building a system where speed matters more than accuracy, BM25 is still valid — just know what you're giving up.
 
 ### Historical Benchmark (v0.2.0 — 100 queries, full corpus)
 

@@ -83,78 +83,68 @@ H3 and H5 need `--colbert-checkpoint` to test properly.
 5. The runner auto-generates: `metrics.json`, `per_query.json`, `significance.json` (now real p-values), `timings.json` (index/query split), `errors.json` (any pipeline failures, no longer silent), `dashboard.html`, `REPORT.md` (via `make report`)
 ---
 
-## v0.3.0 — Actual Benchmark Run ✅
+## v0.3.0 — Full 100-Query Benchmark on Google Colab T4 ✅
 
-**Run ID:** `enhanced_scifact_1784579644`
+**Run ID:** `enhanced_scifact_1784635462`
 **Date:** 2026-07-21
-**Hardware:** x86_64 CPU, ~6GB RAM, no GPU
-**Python:** 3.12.3 | **PyTorch:** 2.13.0+cpu | **Transformers:** 5.14.1
-**Dataset:** SciFact (BEIR) — 500 docs subsampled (judged docs preserved), 10 queries, top-10
+**Hardware:** Google Colab T4 GPU (15.6 GB VRAM)
+**Python:** 3.12 | **PyTorch:** 2.11.0+cu128 | **CUDA:** 12.8
+**Dataset:** SciFact (BEIR) — full corpus, 100 queries, top-10
 **Seed:** 42 (numpy + torch)
-
-### Test Suite Results
-
-- **Core tests:** 42/42 passed (numpy-only, no torch required)
-- **Full pytest:** 55/55 passed in 85.48s
-- All 7 test modules pass: integration, maxsim, metrics, pipelines smoke, raptor, significance, utils
+**Total runtime:** 2.8 minutes
 
 ### nDCG@10 Results
 
 | Pipeline | nDCG@1 | nDCG@3 | nDCG@5 | nDCG@10 | nDCG@100 |
 |---|---|---|---|---|---|
-| **HyDE** | 1.0000 | 1.0000 | 1.0000 | **1.0000** | 1.0000 |
-| **Naive Dense RAG** | 0.9000 | 0.9631 | 0.9631 | 0.9631 | 0.9631 |
-| **Contextual Hybrid** | 0.8000 | 0.8000 | 0.8000 | 0.8690 | 0.8690 |
-| **Hybrid RAG** | 0.8000 | 0.8000 | 0.8000 | 0.8672 | 0.8672 |
-| **BM25 + Rocchio PRF** | 0.6000 | 0.6631 | 0.7018 | 0.7018 | 0.7018 |
+| **🥇 HyDE** | 0.5300 | 0.6536 | 0.6855 | **0.7119** | 0.7119 |
+| **🥈 Naive Dense** | 0.5100 | 0.6349 | 0.6741 | 0.6964 | 0.6964 |
+| **🥉 Contextual Hybrid** | 0.5500 | 0.6223 | 0.6501 | 0.6823 | 0.6823 |
+| **Hybrid RAG** | 0.5100 | 0.6122 | 0.6290 | 0.6668 | 0.6668 |
+| **BM25 + PRF** | 0.3400 | 0.4549 | 0.5092 | 0.5285 | 0.5285 |
 
 ### Latency
 
-| Pipeline | Index Time | Query Time | Total | Per-Query |
-|---|---|---|---|---|
-| **BM25 + Rocchio PRF** | 0.07s | 0.04s | 0.10s | 3.7ms |
-| **HyDE** | 25.64s | 0.17s | 25.82s | 17.4ms |
-| **Hybrid RAG** | 26.89s | 0.17s | 27.06s | 17.0ms |
-| **Contextual Hybrid** | 26.17s | 0.22s | 26.39s | 22.4ms |
-| **Naive Dense RAG** | 27.37s | 0.13s | 27.49s | 12.6ms |
+| Pipeline | Index | Query (total) | Per-Query |
+|---|---|---|---|
+| **BM25 + PRF** | 1.2s | 4.3s | 43ms |
+| **Naive Dense** | 24.4s | 3.2s | 32ms |
+| **HyDE** | 27.0s | 1.9s | 19ms |
+| **Hybrid RAG** | 25.2s | 8.7s | 87ms |
+| **Contextual Hybrid** | 28.3s | 9.3s | 93ms |
 
-### Per-Query nDCG@10 Detail
+### Statistical Significance (100 queries, Bonferroni-corrected)
 
-| Query # | Naive Dense | Hybrid RAG | BM25 PRF | Contextual | HyDE |
-|---|---|---|---|---|---|
-| Q1 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| Q2 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| Q3 | 1.0000 | 1.0000 | 0.6309 | 1.0000 | 1.0000 |
-| Q4 | 1.0000 | 0.3562 | 0.0000 | 0.3333 | 1.0000 |
-| Q5 | 1.0000 | 1.0000 | 0.3869 | 1.0000 | 1.0000 |
-| Q6 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| Q7 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| Q8 | 0.6309 | 0.3155 | 0.0000 | 0.3333 | 1.0000 |
-| Q9 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| Q10 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| **Mean** | **0.9631** | **0.8672** | **0.7018** | **0.8690** | **1.0000** |
-
-### Statistical Significance (10,000 bootstrap resamples, Bonferroni-corrected)
-
-| Comparison | Δ nDCG@10 | Bootstrap p | t-test p | Sig? |
-|---|---|---|---|---|
-| Dense vs BM25 PRF | +0.261 | 0.007 | 0.052 | ❌ |
-| Hybrid vs BM25 PRF | +0.165 | 0.007 | 0.047 | ❌ |
-| BM25 PRF vs Contextual | −0.165 | 0.007 | 0.047 | ❌ |
-| BM25 PRF vs HyDE | −0.298 | 0.007 | 0.053 | ❌ |
-| Dense vs Hybrid | +0.096 | 0.107 | 0.195 | ❌ |
-| Dense vs Contextual | +0.096 | 0.107 | 0.201 | ❌ |
-| Hybrid vs Contextual | +0.001 | 0.458 | 0.873 | ❌ |
-| Dense vs HyDE | −0.037 | 0.359 | 0.343 | ❌ |
-| Hybrid vs HyDE | −0.133 | 0.107 | 0.168 | ❌ |
-| Contextual vs HyDE | −0.133 | 0.107 | 0.168 | ❌ |
-
-> With 10 queries, no comparison reaches Bonferroni significance (α=0.005). BM25 PRF vs Dense/Hybrid (p=0.007) is near threshold. Full 100-query run needed for proper power.
+| Comparison | Δ nDCG@10 | Bootstrap p | Bonferroni Sig? |
+|---|---|---|---|
+| Dense vs BM25 PRF | +0.168 | 0.0000 | ✅ **Yes** |
+| Hybrid vs BM25 PRF | +0.141 | 0.0000 | ✅ **Yes** |
+| BM25 PRF vs Contextual | −0.170 | 0.0000 | ✅ **Yes** |
+| BM25 PRF vs HyDE | −0.183 | 0.0000 | ✅ **Yes** |
+| Dense vs Hybrid | +0.027 | 0.1423 | ❌ No |
+| Dense vs Contextual | −0.002 | 0.4634 | ❌ No |
+| Dense vs HyDE | −0.016 | 0.1253 | ❌ No |
+| Hybrid vs Contextual | −0.029 | 0.0193 | ❌ No |
+| Hybrid vs HyDE | −0.042 | 0.0601 | ❌ No |
+| Contextual vs HyDE | −0.014 | 0.3186 | ❌ No |
 
 ### Interpretation
 
-1. **HyDE perfect score** — Hypothetical document generation bridged the semantic gap perfectly on these queries. Partly small-sample, but directionally consistent.
-2. **Naive Dense strong (0.96)** — SciFact's single-hop scientific claims are ideal for SBERT.
-3. **Contextual ≈ Hybrid (0.87)** — Context prefixes didn't help on already self-contained abstracts.
-4. **BM25 PRF weakest (0.70)** — TF-IDF query expansion added noise on precise scientific terminology.
-5. **BM25 PRF fastest** — 260x faster indexing, 3-6x faster querying. Valid when speed > accuracy.
+1. **HyDE wins (0.712)** — but only by ~1.5 points over Dense. The10-query run's perfect1.0 was small-sample luck.
+2. **Top 4 are statistically indistinguishable** — HyDE, Dense, Contextual, and Hybrid all overlap within noise.
+3. **BM25 PRF is significantly worse** (p≈0.000 vs everything else) — TF-IDF expansion hurts on scientific terminology.
+4. **Latency trade-off real** — BM25 indexes in1.2s vs25-28s for neural pipelines.
+5. **Contextual ≈ Hybrid ≈ Dense** — context prefixes don't help on already self-contained abstracts.
+
+
+### Historical Note: v0.2 Results (100 queries, CPU, historical)
+
+The v0.2 run on CPU with Dense, Hybrid, and Late Interaction showed:
+
+| Pipeline | nDCG@10 | Total Time |
+|---|---|---|
+| Naive Dense RAG | 0.6964 | 265s |
+| Hybrid RAG | 0.6668 | 263s |
+| Late Interaction (untrained) | 0.5801 | 1181s |
+
+These numbers are consistent with the v0.3 Colab run — Dense at 0.696 and Hybrid at 0.667 match exactly. The significance tests from v0.2 were invalid (per-query scores were all zeros due to a BEIR API bug).
