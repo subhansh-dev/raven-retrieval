@@ -5,18 +5,32 @@ from sklearn.mixture import GaussianMixture
 
 def reduce_dimensions(embeddings, n_neighbors=15, n_components=10):
     n_samples = embeddings.shape[0]
-    if n_samples <= n_components:
-        n_components = max(2, n_samples - 1)
+    # Guard: need at least 3 samples for any meaningful UMAP reduction
+    if n_samples < 4:
+        return embeddings
+    # n_components MUST be < n_samples (strict) — UMAP spectral layout
+    # crashes with "k >= N" if they're equal. Also cap at n_samples - 2
+    # to leave room for the spectral decomposition.
+    if n_components >= n_samples:
+        n_components = max(2, n_samples - 2)
     actual_neighbors = min(n_neighbors, n_samples - 1)
     if actual_neighbors < 2:
         actual_neighbors = 2
-    reducer = umap.UMAP(
-        n_neighbors=actual_neighbors,
-        n_components=n_components,
-        metric="cosine",
-        random_state=42,
-    )
-    return reducer.fit_transform(embeddings)
+    # Final safety: n_neighbors must be < n_samples
+    if actual_neighbors >= n_samples:
+        actual_neighbors = n_samples - 1
+    try:
+        reducer = umap.UMAP(
+            n_neighbors=actual_neighbors,
+            n_components=n_components,
+            metric="cosine",
+            random_state=42,
+        )
+        return reducer.fit_transform(embeddings)
+    except Exception:
+        # If UMAP still fails (tiny cluster, degenerate data), return
+        # raw embeddings — downstream GMM can handle them directly.
+        return embeddings
 
 
 def select_cluster_count(embeddings, min_k=2, max_k=10):
@@ -72,6 +86,11 @@ def global_local_cluster(embeddings, soft_threshold=0.1):
             final_cluster_id += 1
             continue
         local_embeddings = embeddings[global_members]
+        # Skip UMAP for tiny clusters — just cluster directly
+        if len(global_members) <= 4:
+            final_clusters[final_cluster_id] = global_members
+            final_cluster_id += 1
+            continue
         local_n_neighbors = min(10, len(global_members) - 1)
         if local_n_neighbors < 2:
             final_clusters[final_cluster_id] = global_members

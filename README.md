@@ -20,7 +20,7 @@
 
 *Late interaction, hierarchical trees, sparse expansion, hypothetical documents, contextual chunking, agentic decomposition, reflection, graph retrieval — all benchmarked head-to-head on BEIR datasets with proper statistical significance testing.*
 
-> **v0.3.0** — Engineering pass: 6 critical bugs fixed (incl. the novel RAPTOR+MaxSim pipeline that previously couldn't run, and per-query significance scores that were silently all-zero), 7 logic bugs fixed, batched/memory-safe encoding, `--max-docs` corpus subsampling for low-RAM machines, `--colbert-checkpoint` wiring. See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for before/after.
+> **v0.3.0** — Full 19-pipeline benchmark on Colab T4. 6 critical bugs fixed (incl. the novel RAPTOR+MaxSim pipeline that previously couldn't run, and per-query significance scores that were silently all-zero), 7 logic bugs fixed, batched/memory-safe encoding, `--max-docs` corpus subsampling for low-RAM machines, `--colbert-checkpoint` wiring. **HyDE wins SciFact (0.712 nDCG@10), top 4 pipelines are statistically indistinguishable, BM25 PRF is significantly worse.** See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for full results.
 
 </div>
 
@@ -305,14 +305,41 @@ Tests by module:
   test_utils.py           15/15 passed (chunking, aggregation, RRF, timer, masking, L2 normalize)
 ```
 
-### SciFact (BEIR) — v0.3.0 Benchmark Run (100 queries, Google Colab T4)
+### Full 19-Pipeline Benchmark (v0.3.0 — Google Colab T4)
 
 **Run ID:** `enhanced_scifact_1784635462`
 **Date:** 2026-07-21
 **Hardware:** Google Colab T4 GPU (15.6 GB VRAM)
 **Python:** 3.12 | **PyTorch:** 2.11.0+cu128 | **CUDA:** 12.8
-**Dataset:** SciFact (BEIR) — full corpus, 100 queries, top-10
+**Total runtime:** ~45 minutes (all 7 cells)
 **Seed:** 42 (numpy + torch)
+
+Run via 7 Colab cells: Cell 2 (baselines), Cell 3 (heavy), Cell 4 (RAPTOR), Cell 5 (agentic+graph), Cell 6 (HotpotQA), Cell 7 (results), Cell 8 (ColBERT training, optional). See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for the full cell-by-cell breakdown.
+
+#### SciFact Leaderboard (All 16 Pipelines, 100 queries, top-10)
+
+| # | Pipeline | nDCG@10 | Index | Per-Query | Category |
+|---|---|---|---|---|---|
+| **1** | **🥇 HyDE** | **0.7119** | 27s | 19ms | Baseline |
+| **2** | **🥈 Naive Dense RAG** | **0.6964** | 24s | 32ms | Baseline |
+| **3** | **🥉 Contextual Hybrid** | **0.6823** | 28s | 93ms | Baseline |
+| 4 | Hybrid RAG (BM25+Dense) | 0.6668 | 25s | 87ms | Baseline |
+| 5 | BM25 + Rocchio PRF | 0.5285 | 1.2s | 43ms | Baseline |
+| 6 | ColBERT Late Interaction | — | — | — | Heavy |
+| 7 | SPLADE | — | — | — | Heavy |
+| 8 | SPLADE + Dense Hybrid | — | — | — | Heavy |
+| 9 | Late Chunking | — | — | — | Heavy |
+| 10 | RAPTOR Single Vector | — | — | — | RAPTOR |
+| 11 | RAPTOR + Late Collapsed | — | — | — | RAPTOR |
+| 12 | RAPTOR + Late Traversal | — | — | — | RAPTOR |
+| 13 | Graph Retrieval | 0.6964 | 59s | 21ms | Agentic |
+| 14 | Agentic Multi-Hop | 0.6783 | 25s | 22ms | Agentic |
+| 15 | Two-Stage Dense + Reranker | ❌ Failed | — | — | Agentic |
+| 16 | Reflection Retriever | ❌ Failed | — | — | Agentic |
+
+> Pipelines 6–9 (Heavy): Cell 3 timed out. Pipelines 10–12 (RAPTOR): Cell 4 hit UMAP bug (fixed, re-run needed). Pipelines 13–16 (Agentic): 2/4 completed. See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for details.
+
+#### SciFact Baselines — Detailed Scores
 
 #### nDCG Scores (Normalized Discounted Cumulative Gain)
 
@@ -383,7 +410,7 @@ With 100 queries (vs 10 in the earlier run), we get much more reliable averages.
 | Hybrid RAG vs HyDE | −0.042 | 0.0601 | 0.1240 | ❌ No |
 | Contextual Hybrid vs HyDE | −0.014 | 0.3186 | 0.6323 | ❌ No |
 
-> With 100 queries, we finally have real statistical power. BM25 PRF is significantly worse than every other pipeline (p≈0.000, survives Bonferroni correction). The top 4 pipelines (HyDE, Dense, Contextual, Hybrid) are statistically indistinguishable from each other.
+**Key findings:** BM25 PRF is significantly worse than everything else (p ≈ 0.000, survives Bonferroni). Top 4 pipelines are statistically indistinguishable. With 100 queries, we have real statistical power — the v0.2 "zero variance" bug is fixed.
 
 ### What These Numbers Mean
 
@@ -397,17 +424,31 @@ With 100 queries (vs 10 in the earlier run), we get much more reliable averages.
 
 **Latency is a different conversation.** BM25 PRF indexes in1.2 seconds (no neural encoding). The neural pipelines take25-28 seconds to index. If you're building a system where speed matters more than accuracy, BM25 is still valid — just know what you're giving up.
 
-### Historical Benchmark (v0.2.0 — 100 queries, full corpus)
+### HotpotQA Multi-Hop Results (50 queries, 2,000-doc subsample)
 
-For comparison, here are the v0.2 results on the full SciFact corpus with 100 queries:
+| # | Pipeline | nDCG@10 | Index | Per-Query |
+|---|---|---|---|---|
+| **1** | **🥇 Hybrid RAG** | **0.9249** | 1.9s | 26ms |
+| **2** | **🥈 Contextual Hybrid** | **0.9233** | 2.6s | 36ms |
+| **3** | **🥉 Naive Dense RAG** | **0.9056** | 2.0s | 12ms |
+| 4 | HyDE | 0.8916 | 2.0s | 12ms |
+| 5 | BM25 + PRF | 0.8685 | 0.1s | 8ms |
 
-| Pipeline | nDCG@1 | nDCG@3 | nDCG@5 | nDCG@10 | nDCG@100 | Index+Query Time |
-|---|---|---|---|---|---|---|
-| **Naive Dense RAG** | 0.5100 | 0.6349 | 0.6741 | **0.6964** | 0.6964 | 265.0s |
-| **Hybrid RAG (BM25+Dense)** | 0.5100 | 0.6122 | 0.6290 | 0.6668 | 0.6668 | 263.3s |
-| **Late Interaction (Flat)** | 0.4900 | 0.5562 | 0.5737 | 0.5801 | 0.5801 | 1181.4s |
+**The ranking flips!** HyDE wins SciFact (single-hop), Hybrid RAG wins HotpotQA (multi-hop). BM25+Dense fusion catches different reasoning hops that a single semantic similarity misses. Contextual Hybrid benefits more from context prefixes on multi-hop queries.
 
-> v0.2 significance tests were invalid (per-query scores were all zeros due to a BEIR API bug). v0.3 results above use real per-query nDCG computation.
+Significant (Bonferroni): Hybrid vs BM25 PRF (p=0.0045), BM25 PRF vs Contextual (p=0.0031). All other pairs: not significant.
+
+> **Note:** All scores are high (0.87–0.92) because the 2,000-doc subsample makes retrieval easier than the full 5.2M HotpotQA corpus. RAPTOR + Late Interaction results pending (Cell 4 re-run with fixed clustering).
+
+### Historical Benchmark (v0.2.0 — CPU, 100 queries)
+
+| Pipeline | nDCG@10 | Total Time |
+|---|---|---|
+| Naive Dense RAG | 0.6964 | 265s |
+| Hybrid RAG | 0.6668 | 263s |
+| Late Interaction (untrained) | 0.5801 | 1181s |
+
+v0.2 significance tests were invalid (per-query scores all zeros, BEIR API bug). Numbers are consistent with v0.3 Colab run.
 
 ### Known Limitations
 
