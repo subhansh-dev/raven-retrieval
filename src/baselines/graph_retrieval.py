@@ -178,12 +178,21 @@ class GraphRetriever:
     """
 
     def __init__(self, base_retriever=None, chunk_size=200, chunk_overlap=50,
-                 similarity_threshold=0.5):
+                 similarity_threshold=0.5, model=None):
         self.base_retriever = base_retriever
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.graph = DocumentGraph(similarity_threshold=similarity_threshold)
         self._indexed = False
+        # Cache the embedding model so we don't reload on every fallback call
+        self._embedding_model = model  # dependency injection for tests / shared models
+
+    def _get_embedding_model(self):
+        """Lazily load and cache the SentenceTransformer model (one-time cost)."""
+        if self._embedding_model is None:
+            from sentence_transformers import SentenceTransformer
+            self._embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+        return self._embedding_model
 
     def _chunk_text(self, text):
         tokens = text.split()
@@ -205,7 +214,7 @@ class GraphRetriever:
         from sentence_transformers import SentenceTransformer
 
         if embeddings is None:
-            model = SentenceTransformer("all-MiniLM-L6-v2")
+            model = self._get_embedding_model()
             texts = []
             ids = []
             for doc_id, doc in corpus.items():
@@ -233,8 +242,7 @@ class GraphRetriever:
 
     def _embedding_fallback_retrieve(self, query, top_k=10):
         """Fallback retrieval using graph node embeddings directly (no base_retriever)."""
-        from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer("all-MiniLM-L6-v2")
+        model = self._get_embedding_model()
         query_emb = model.encode([query])[0]
         query_emb = query_emb / np.linalg.norm(query_emb)
 

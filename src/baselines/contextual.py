@@ -15,7 +15,7 @@ Reference: Anthropic, "Contextual Retrieval" (2024)
 import numpy as np
 import logging
 
-from ..utils import aggregate_doc_scores, reciprocal_rank_fusion, l2_normalize, iter_corpus, full_doc_text
+from ..utils import aggregate_doc_scores, reciprocal_rank_fusion, l2_normalize, iter_corpus, full_doc_text, tokenize_for_bm25
 
 logger = logging.getLogger(__name__)
 
@@ -140,13 +140,13 @@ class ContextualBM25Retriever:
         self.corpus_ids = [c["id"] for c in chunks]
         self.corpus_texts = [c["text"] for c in chunks]
 
-        tokenized = [text.lower().split() for text in self.corpus_texts]
+        tokenized = [tokenize_for_bm25(text) for text in self.corpus_texts]
         self.bm25 = BM25Okapi(tokenized)
 
         return self
 
     def retrieve(self, query, top_k=10):
-        tokenized_query = query.lower().split()
+        tokenized_query = tokenize_for_bm25(query)
         scores = self.bm25.get_scores(tokenized_query)
         return aggregate_doc_scores(self.corpus_ids, scores, top_k=top_k)
 

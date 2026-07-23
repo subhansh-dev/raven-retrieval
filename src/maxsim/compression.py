@@ -19,6 +19,8 @@ import logging
 import json
 import os
 
+from ..utils import assign_centroids as _assign_centroids_shared
+
 logger = logging.getLogger(__name__)
 
 
@@ -100,11 +102,12 @@ class ResidualCompressor:
         return residual
 
     def _assign_centroids(self, tokens):
-        """Assign each token to its nearest centroid (vectorized via ||a-b||² expansion)."""
-        centroid_sq = (self.centroids ** 2).sum(axis=1)
-        token_sq = (tokens ** 2).sum(axis=1, keepdims=True)
-        dists_sq = token_sq + centroid_sq[None, :] - 2.0 * (tokens @ self.centroids.T)
-        return np.argmin(dists_sq, axis=1)
+        """Assign each token to its nearest centroid.
+
+        Uses the shared assign_centroids() from utils (canonical version).
+        Kept as a method for API compatibility with existing callers.
+        """
+        return _assign_centroids_shared(tokens, self.centroids)
 
     def compress_document(self, token_embeddings):
         """Compress a document's token embeddings. Vectorized.
@@ -121,7 +124,7 @@ class ResidualCompressor:
 
         token_embeddings = token_embeddings.astype(np.float32)
 
-        centroid_ids = self._assign_centroids(token_embeddings)
+        centroid_ids = _assign_centroids_shared(token_embeddings, self.centroids)
         residuals = token_embeddings - self.centroids[centroid_ids]
         quantized_residuals = self._quantize_residual(residuals)
 

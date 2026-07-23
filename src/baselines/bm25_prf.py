@@ -18,7 +18,7 @@ Reference: Rocchio (1971), "Relevance Feedback in Information Retrieval"
 import numpy as np
 import logging
 
-from ..utils import chunk_corpus, aggregate_doc_scores
+from ..utils import chunk_corpus, aggregate_doc_scores, tokenize_for_bm25
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class BM25PRFRetriever:
         self.corpus_ids, self.corpus_texts = chunk_corpus(
             corpus, self.chunk_size, self.chunk_overlap
         )
-        self.tokenized_corpus = [text.lower().split() for text in self.corpus_texts]
+        self.tokenized_corpus = [tokenize_for_bm25(text) for text in self.corpus_texts]
         self.bm25 = BM25Okapi(self.tokenized_corpus)
         self._n_docs = len(self.tokenized_corpus)
 
@@ -124,7 +124,7 @@ class BM25PRFRetriever:
 
     def retrieve(self, query, top_k=10):
         """Retrieve with BM25 + PRF expansion (two-stage)."""
-        tokenized_query = query.lower().split()
+        tokenized_query = tokenize_for_bm25(query)
 
         # Stage 1: initial BM25 retrieval over full corpus (one pass)
         scores = self.bm25.get_scores(tokenized_query)
@@ -153,6 +153,6 @@ class BM25PRFRetriever:
 
     def retrieve_no_prf(self, query, top_k=10):
         """Standard BM25 retrieval without PRF (for comparison)."""
-        tokenized_query = query.lower().split()
+        tokenized_query = tokenize_for_bm25(query)
         scores = self.bm25.get_scores(tokenized_query)
         return aggregate_doc_scores(self.corpus_ids, scores, top_k=top_k)

@@ -3,7 +3,7 @@
 import numpy as np
 import logging
 
-from ..utils import chunk_corpus, aggregate_doc_scores, reciprocal_rank_fusion, l2_normalize
+from ..utils import chunk_corpus, aggregate_doc_scores, reciprocal_rank_fusion, l2_normalize, tokenize_for_bm25
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class HybridRetriever:
         self.corpus_ids, self.corpus_texts = chunk_corpus(
             corpus, self.chunk_size, self.chunk_overlap
         )
-        tokenized_corpus = [text.lower().split() for text in self.corpus_texts]
+        tokenized_corpus = [tokenize_for_bm25(text) for text in self.corpus_texts]
         self.bm25 = BM25Okapi(tokenized_corpus)
         embeddings = self.dense_model.encode(self.corpus_texts, show_progress_bar=True, batch_size=64)
         self.corpus_embeddings = l2_normalize(np.array(embeddings))
@@ -37,7 +37,7 @@ class HybridRetriever:
 
     def retrieve(self, query, top_k=10):
         # BM25 channel
-        tokenized_query = query.lower().split()
+        tokenized_query = tokenize_for_bm25(query)
         bm25_scores = self.bm25.get_scores(tokenized_query)
         bm25_ranking = aggregate_doc_scores(self.corpus_ids, bm25_scores, top_k=top_k * 3)
 

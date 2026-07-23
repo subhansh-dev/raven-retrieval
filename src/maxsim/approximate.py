@@ -10,25 +10,12 @@ Python loops (the old implementation was ~256x slower than necessary).
 
 import numpy as np
 
-from ..utils import to_numpy as _to_numpy
+from ..utils import to_numpy as _to_numpy, assign_centroids as _assign_centroids
 
 try:
     import faiss
 except ImportError:
     faiss = None
-
-
-def _assign_centroids(centroids, tokens):
-    """Assign each token to its nearest centroid. Vectorized.
-
-    Uses ||a-b||² = |a|² + |b|² - 2a·b to avoid materializing
-    (n_tokens, n_centroids, dim) arrays.
-    """
-    tokens = _to_numpy(tokens)
-    centroid_sq = (centroids ** 2).sum(axis=1)
-    token_sq = (tokens ** 2).sum(axis=1, keepdims=True)
-    dists_sq = token_sq + centroid_sq[None, :] - 2.0 * (tokens @ centroids.T)
-    return np.argmin(dists_sq, axis=1)
 
 
 class CentroidIndex:
@@ -51,13 +38,13 @@ class CentroidIndex:
         kmeans = faiss.Kmeans(dimension, n_centroids, niter=20, gpu=False)
         kmeans.train(token_embeddings)
         self.centroids = kmeans.centroids
-        self.assignments = _assign_centroids(self.centroids, token_embeddings)
+        self.assignments = _assign_centroids(token_embeddings, self.centroids)
         return self
 
     def encode_document(self, token_embeddings):
         """Encode a document as (centroid_ids, residuals). Vectorized."""
         tokens = _to_numpy(token_embeddings)
-        centroid_ids = _assign_centroids(self.centroids, tokens)
+        centroid_ids = _assign_centroids(tokens, self.centroids)
         residuals = tokens - self.centroids[centroid_ids]
         return centroid_ids, residuals
 

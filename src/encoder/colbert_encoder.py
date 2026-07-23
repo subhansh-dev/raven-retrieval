@@ -201,7 +201,7 @@ class ColbertContrastiveEncoder(ColbertEncoder):
         return loss
 
     def in_batch_negatives_loss(self, query_emb, doc_emb):
-        """InfoNCE loss with in-batch negatives — vectorized version.
+        """InfoNCE loss with in-batch negatives — fully vectorized.
 
         For a batch of (query, positive_doc) pairs, other docs in the batch
         serve as negatives. Uses the learned temperature (log_tau) so the
@@ -209,12 +209,15 @@ class ColbertContrastiveEncoder(ColbertEncoder):
 
         Previous implementation used Python loops over batch×batch pairs
         calling _maxsim_torch per pair — extremely slow (O(n²) Python calls).
-        This version computes all MaxSim scores in one matrix operation.
+        Then partially vectorized: outer loop per query, inner loop per doc.
+        This version computes ALL MaxSim scores via batched matmul + slicing,
+        reducing the loop to just O(n) for the slice-by-offset step.
         """
         batch_size = len(query_emb)
         # Normalize all embeddings for cosine similarity
         q_norms = []
         d_norms = []
+        d_lengths = []
         for i in range(batch_size):
             q = query_emb[i]
             d = doc_emb[i]
@@ -223,24 +226,30 @@ class ColbertContrastiveEncoder(ColbertEncoder):
             if d.dim() == 1:
                 d = d.unsqueeze(0)
             q_norms.append(torch.nn.functional.normalize(q, p=2, dim=-1))
-            d_norms.append(torch.nn.functional.normalize(d, p=2, dim=-1))
+            d_n = torch.nn.functional.normalize(d, p=2, dim=-1)
+            d_norms.append(d_n)
+            d_lengths.append(d_n.shape[0])
 
-        # Compute MaxSim for all (query_i, doc_j) pairs efficiently
+        # Concatenate all doc embeddings into one flat tensor
+        all_d_flat = torch.cat(d_norms, dim=0)  # (total_d_tokens, dim)
+
+        # Compute MaxSim for all (query_i, doc_j) pairs
+        # For each query, one matmul against the entire flat doc tensor,
+        # then slice by offsets to get per-doc MaxSim scores
         scores = torch.zeros(batch_size, batch_size, device=self.device)
+        offsets = torch.tensor([0] + d_lengths[:-1], device=self.device).cumsum(0)
+
         for i in range(batch_size):
             q_i = q_norms[i]  # (n_q_tokens, dim)
-            # Concatenate all doc embeddings into one flat tensor for this query
-            all_d = torch.cat([d_norms[j] for j in range(batch_size)], dim=0)  # (total_d_tokens, dim)
             # Single matrix multiply: (n_q_tokens, total_d_tokens)
-            sim_matrix = torch.mm(q_i, all_d.T)
-            # Split back into per-doc columns and take max per query token per doc
-            offset = 0
+            sim_matrix = torch.mm(q_i, all_d_flat.T)
+            # Slice by doc offsets to compute per-doc MaxSim
             for j in range(batch_size):
-                d_len = d_norms[j].shape[0]
-                doc_sim = sim_matrix[:, offset:offset + d_len]
+                start = offsets[j].item()
+                end = start + d_lengths[j]
+                doc_sim = sim_matrix[:, start:end]
                 # MaxSim: sum of per-token max similarities
                 scores[i, j] = doc_sim.max(dim=1).values.sum()
-                offset += d_len
 
         labels = torch.arange(batch_size, device=self.device)
         # Use learned temperature (falls back to self.temperature scale via exp(log_tau))

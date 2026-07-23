@@ -23,7 +23,7 @@ from ..raptor.chunker import TextChunker
 from ..raptor.clustering import global_local_cluster
 from ..raptor.tree import TreeNode, RaptorTree
 from ..raptor.summarizer import LLMSummarizer
-from ..maxsim.brute_force import maxsim_score, pack_doc_embeddings, brute_force_rank_fast
+from ..maxsim.brute_force import pack_doc_embeddings, brute_force_rank_fast
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +153,12 @@ class LateInteractionRaptor:
         return scored
 
     def retrieve_traversal(self, query_text, top_k=10):
-        """Top-down traversal: score roots, take top-k, descend to children."""
+        """Top-down traversal: score roots, take top-k, descend to children.
+
+        Uses batched MaxSim scoring per level instead of per-node Python loop.
+        Each level is scored in one matmul via brute_force_rank_fast, then
+        we descend to children of top-k nodes. Repeat until leaves.
+        """
         if self.tree is None:
             raise ValueError("Tree not built. Call build() first.")
         if not self.tree.root_ids:
@@ -161,21 +166,27 @@ class LateInteractionRaptor:
         query_embs_np = self._encode_query(query_text)
         selected = []
         current_ids = self.tree.root_ids
+
         while current_ids:
-            scores = []
-            for nid in current_ids:
-                node = self.tree.nodes[nid]
-                score = maxsim_score(query_embs_np, node.embeddings)
-                scores.append((nid, score))
-            scores.sort(key=lambda x: x[1], reverse=True)
-            top_current = scores[:top_k]
+            # Batch-score all nodes at this level
+            level_nodes = [self.tree.nodes[nid] for nid in current_ids]
+            level_embs = [n.embeddings for n in level_nodes]
+            flat_embs, doc_lengths = pack_doc_embeddings(level_embs)
+            ranked = brute_force_rank_fast(query_embs_np, flat_embs, doc_lengths,
+                                            top_k=min(top_k, len(level_nodes)))
+
+            # Map ranked indices back to node IDs
+            top_current = [(current_ids[idx], score) for idx, score in ranked]
             selected.extend(top_current)
+
+            # Descend to children of top-k
             next_ids = []
             for nid, _ in top_current:
                 node = self.tree.nodes[nid]
                 for child in node.children:
                     next_ids.append(child.node_id)
             current_ids = next_ids
+
         selected.sort(key=lambda x: x[1], reverse=True)
         return selected[:top_k]
 

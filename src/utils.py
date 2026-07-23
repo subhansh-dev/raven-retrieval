@@ -37,6 +37,76 @@ def full_doc_text(doc):
     return (doc.get("title", "") + " " + doc.get("text", "")).strip()
 
 
+# ── Tokenization helpers (for BM25) ────────────────────────────────
+
+# Common English stop words — used by BM25 tokenization across all
+# pipelines. Keeping this in utils ensures consistency (the old code
+# used .lower().split() everywhere, which overstated BM25's weaknesses
+# by including stop words and unstemmed variants in scoring).
+ENGLISH_STOP_WORDS = frozenset({
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "shall", "can", "of", "in", "to", "for",
+    "with", "on", "at", "from", "by", "about", "as", "into", "through",
+    "during", "before", "after", "above", "below", "between", "under",
+    "again", "further", "then", "once", "here", "there", "when", "where",
+    "why", "how", "all", "each", "every", "both", "few", "more", "most",
+    "other", "some", "such", "no", "nor", "not", "only", "own", "same",
+    "so", "than", "too", "very", "just", "because", "but", "and", "or",
+    "if", "while", "also", "this", "that", "these", "those", "what",
+    "which", "who", "whom", "it", "its", "he", "she", "they", "we",
+    "me", "my", "your", "his", "her", "our", "their", "you", "i",
+})
+
+
+def tokenize_for_bm25(text):
+    """Tokenize text for BM25 with stemming and stop-word removal.
+
+    Uses simple Porter-style suffix stripping (no NLTK dependency).
+    This is more correct than .lower().split() — BM25 performs better
+    with stemmed tokens because "running" and "runs" map to the same
+    term, and stop words add noise to TF*IDF scoring.
+    """
+    # Lowercase and split on whitespace + punctuation
+    import re
+    tokens = re.findall(r'\b[a-z]+\b', text.lower())
+
+    # Remove stop words
+    tokens = [t for t in tokens if t not in ENGLISH_STOP_WORDS and len(t) >= 2]
+
+    # Simple suffix stripping (approximates Porter stemmer without NLTK)
+    stemmed = []
+    for token in tokens:
+        # Strip common suffixes
+        if token.endswith("ing") and len(token) > 5:
+            token = token[:-3]
+        elif token.endswith("tion") and len(token) > 5:
+            token = token[:-4] + "e"
+        elif token.endswith("sion") and len(token) > 5:
+            token = token[:-4] + "s"
+        elif token.endswith("ness") and len(token) > 5:
+            token = token[:-4]
+        elif token.endswith("ment") and len(token) > 5:
+            token = token[:-4]
+        elif token.endswith("able") and len(token) > 5:
+            token = token[:-4] + "e"
+        elif token.endswith("ible") and len(token) > 5:
+            token = token[:-4] + "e"
+        elif token.endswith("ly") and len(token) > 4:
+            token = token[:-2]
+        elif token.endswith("ity") and len(token) > 4:
+            token = token[:-3] + "e"
+        elif token.endswith("ed") and len(token) > 4:
+            token = token[:-2]
+        elif token.endswith("es") and len(token) > 3:
+            token = token[:-2]
+        elif token.endswith("s") and len(token) > 3 and token[-2] not in "su":
+            token = token[:-1]
+        stemmed.append(token)
+
+    return stemmed
+
+
 # ── Chunking ─────────────────────────────────────────────────────────
 
 def chunk_text(text, chunk_size=200, chunk_overlap=50):
@@ -108,6 +178,22 @@ def l2_normalize(matrix, axis=-1):
     """L2-normalize a numpy array along an axis (safe for zero vectors)."""
     norms = np.linalg.norm(matrix, axis=axis, keepdims=True)
     return matrix / np.clip(norms, 1e-8, None)
+
+
+def assign_centroids(tokens, centroids):
+    """Assign each token to its nearest centroid (vectorized via ||a-b||² expansion).
+
+    Uses ||a-b||² = |a|² + |b|² - 2a·b to avoid materializing
+    (n_tokens, n_centroids, dim) intermediate arrays.
+
+    This is the canonical version — used by compression.py and approximate.py
+    instead of their own local copies.
+    """
+    tokens = to_numpy(tokens)
+    centroid_sq = (centroids ** 2).sum(axis=1)
+    token_sq = (tokens ** 2).sum(axis=1, keepdims=True)
+    dists_sq = token_sq + centroid_sq[None, :] - 2.0 * (tokens @ centroids.T)
+    return np.argmin(dists_sq, axis=1)
 
 
 def to_numpy(x):
