@@ -52,6 +52,51 @@ MaxSim: for each query token, find the most similar document token (cosine), sum
 - **H4:** RAPTOR + late interaction ≈ hybrid on SciFact (single-hop doesn't need hierarchy)
 - **H5:** Untrained late interaction < dense on SciFact (untrained projection hurts)
 
+## Current Results (v0.3.0, 7 runs, seed=42)
+
+### SciFact Baselines (100 queries, 5,183 docs)
+
+| Pipeline | nDCG@10 | Per-Query |
+|---|---|---|
+| 🏆 HyDE | 0.7119 | 18.6ms |
+| Naive Dense | 0.6964 | 31.8ms |
+| Contextual Hybrid | 0.6823 | 93.1ms |
+| Hybrid RAG | 0.6668 | 86.8ms |
+| BM25 PRF | 0.5285 | 43.1ms |
+
+BM25 PRF is significantly worse than all others (p≈0.000, Bonferroni-corrected). Top 4 are statistically indistinguishable.
+
+### HotpotQA Multi-Hop (50 queries, 2,000 docs)
+
+| Pipeline | nDCG@10 | Per-Query |
+|---|---|---|
+| 🏆 Hybrid RAG | 0.9249 | 22.5ms |
+| Contextual Hybrid | 0.9233 | 22.3ms |
+| Naive Dense | 0.9056 | 11.7ms |
+| HyDE | 0.8916 | 25.6ms |
+| BM25 PRF | 0.8685 | 8.1ms |
+
+Hybrid vs BM25 PRF (p=0.0045) and BM25 PRF vs Contextual (p=0.0031) are Bonferroni-significant. All other pairs: not significant.
+
+### Agentic + Graph (SciFact, 100 queries)
+
+| Pipeline | nDCG@10 | Per-Query |
+|---|---|---|
+| Graph Retrieval | 0.6964 | 20.7ms |
+| Agentic Multi-Hop | 0.6783 | 21.6ms |
+
+Not statistically different (p=0.0934). Two-Stage Dense + Reranker and Reflection Retriever both failed.
+
+### Cross-Dataset Insight
+
+Ranking flips: HyDE wins SciFact (single-hop), Hybrid RAG wins HotpotQA (multi-hop). No single pipeline dominates across both tasks.
+
+### Uncompleted
+
+- Heavy pipelines (ColBERT, SPLADE, Late Chunking): Cell 3 timed out
+- RAPTOR pipelines: UMAP bug (fixed in v0.3.1, re-run needed)
+- Reranker + Reflection: runtime crashes
+
 ## Limitations
 
 1. ColBERT projection not trained (fix: `make train-colbert`)

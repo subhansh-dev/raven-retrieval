@@ -1,5 +1,23 @@
 # Raven-Retrieval Benchmark Results
 
+## All Runs Overview
+
+| Run ID | Dataset | Queries | Docs | Best Pipeline | nDCG@10 | Best Per-Q | Total Pipelines |
+|---|---|---|---|---|---|---|---|
+| `enhanced_hotpotqa_1784650089` | HotpotQA | 50 | 2,000 | 🏆 Hybrid RAG | 0.9249 | BM25 PRF (8ms) | 5 |
+| `enhanced_scifact_1784579644` | SciFact (small) | 10 | 500 | HyDE | 1.0000* | BM25 PRF (3.7ms) | 5 |
+| `enhanced_scifact_1784635462` | SciFact (main) | 100 | 5,183 | 🏆 HyDE | 0.7119 | HyDE (18.6ms) | 5 |
+| `enhanced_scifact_1784649977` | SciFact (graph) | 100 | 5,183 | Graph Retrieval | 0.6964 | Agentic (21.6ms) | 2 |
+| `enhanced_scifact_1784650271` | SciFact (repeat) | 100 | 5,183 | HyDE | 0.7119 | BM25 PRF (45.2ms) | 5 |
+
+> *SciFact (small): 10 queries — HyDE's perfect 1.0 is small-sample luck. The main 100-query run shows HyDE at 0.7119. The repeat run confirms reproducibility (seed=42 produces identical nDCG scores).
+
+### Cross-Dataset Key Insight
+
+**The ranking flips between datasets.** On SciFact (single-hop scientific claims), HyDE wins because hypothetical documents bridge the query-document semantic gap. On HotpotQA (multi-hop reasoning questions), Hybrid RAG wins because BM25+Dense fusion catches different reasoning hops that a single semantic similarity misses. No single pipeline dominates across both tasks.
+
+---
+
 ## v0.3.0 — Full 19-Pipeline Benchmark on Google Colab T4 ✅
 
 **Run ID:** `enhanced_scifact_1784635462`
@@ -222,10 +240,10 @@
 | Pipeline | Index Time | Query Time | Per-Query Latency |
 |---|---|---|---|
 | **BM25 + Rocchio PRF** | **0.1s** | **0.4s** | **8ms** |
-| **Naive Dense RAG** | 2.0s | 0.6s | 12ms |
-| **HyDE** | 2.0s | 0.6s | 12ms |
-| **Hybrid RAG** | 1.9s | 1.3s | 26ms |
-| **Contextual Hybrid** | 2.6s | 1.8s | 36ms |
+| **Naive Dense RAG** | 2.6s | 0.6s | 12ms |
+| **HyDE** | 2.0s | 1.3s | 26ms |
+| **Hybrid RAG** | 1.9s | 1.1s | 22ms |
+| **Contextual Hybrid** | 2.2s | 1.1s | 22ms |
 
 #### Statistical Significance (Bonferroni-corrected)
 

@@ -30,6 +30,13 @@ Quick reference for the retrieval techniques implemented or considered in this p
 - **Key paper**: Gao et al., 2023 — "Precise Zero-Shot Dense Retrieval without Relevance Labels"
 - **Implemented in**: `src/baselines/hyde.py`
 
+### Benchmark Results
+
+- **SciFact (100 queries):** 🏆 nDCG@10 = 0.7119 — best overall. Hypothetical documents genuinely bridge the query-document semantic gap, even with simple templates instead of an LLM. Only ~2 points above Naive Dense, not a game-changer on single-hop claims.
+- **HotpotQA (50 queries):** nDCG@10 = 0.8916 — drops to 4th place. A single generated passage can't bridge two separate reasoning steps needed for multi-hop questions.
+- **Statistical significance:** Top 4 baselines on SciFact are statistically indistinguishable (p > 0.05 after Bonferroni). HyDE's lead over Dense is not significant.
+- **Latency:** 18.6ms per-query on SciFact (fastest neural pipeline). 25.6ms on HotpotQA.
+
 ## Contextual Retrieval (Anthropic)
 
 - Prepend document context to each chunk before embedding
@@ -51,11 +58,23 @@ Quick reference for the retrieval techniques implemented or considered in this p
 - Reflection: retrieve → evaluate sufficiency → reformulate if needed
 - **Implemented in**: `src/baselines/agentic.py`
 
+### Benchmark Results
+
+- **Agentic Multi-Hop (SciFact, 100 queries):** nDCG@10 = 0.6783 — slightly behind Graph Retrieval (0.6964). Template-based query decomposition doesn't help on single-hop SciFact claims — these queries don't need decomposition. Statistically indistinguishable from Graph (p=0.0934).
+- **Reflection Retriever:** ❌ Failed on SciFact (runtime crash).
+- **Two-Stage Dense + Reranker:** ❌ Failed on SciFact (runtime crash).
+
 ## GraphRAG
 
 - Build cosine-similarity document graph → label propagation community detection
 - Expand results with community members
 - **Implemented in**: `src/baselines/graph_retrieval.py`
+
+### Benchmark Results
+
+- **SciFact (100 queries):** nDCG@10 = 0.6964 — matches Naive Dense exactly. Community expansion added zero value on SciFact because scientific abstracts are self-contained, so cosine-sim document graphs don't capture useful thematic structure. 2.4x slower index time (59s vs 25s) buys nothing here.
+- **Not tested on HotpotQA** (needs multi-hop corpus structure where community expansion may help).
+- **Statistical significance:** Graph vs Agentic Multi-Hop not significantly different (p=0.0934).
 
 ## Key Papers
 

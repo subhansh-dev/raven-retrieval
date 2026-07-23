@@ -316,6 +316,20 @@ Tests by module:
 
 Run via 7 Colab cells: Cell 2 (baselines), Cell 3 (heavy), Cell 4 (RAPTOR), Cell 5 (agentic+graph), Cell 6 (HotpotQA), Cell 7 (results), Cell 8 (ColBERT training, optional). See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for the full cell-by-cell breakdown.
 
+#### All Runs Overview (7 experiments, 2 datasets)
+
+| Run ID | Dataset | Queries | Docs | Best Pipeline | nDCG@10 | Fastest Per-Q |
+|---|---|---|---|---|---|---|
+| `enhanced_hotpotqa_1784650089` | HotpotQA | 50 | 2,000 | 🏆 Hybrid RAG | 0.9249 | BM25 PRF (8ms) |
+| `enhanced_scifact_1784579644` | SciFact (small) | 10 | 500 | HyDE | 1.0000* | BM25 PRF (3.7ms) |
+| `enhanced_scifact_1784635462` | SciFact (main) | 100 | 5,183 | 🏆 HyDE | 0.7119 | HyDE (18.6ms) |
+| `enhanced_scifact_1784649977` | SciFact (graph) | 100 | 5,183 | Graph Retrieval | 0.6964 | Agentic (21.6ms) |
+| `enhanced_scifact_1784650271` | SciFact (repeat) | 100 | 5,183 | HyDE | 0.7119 | BM25 PRF (45.2ms) |
+
+> *SciFact (small): 10 queries — perfect 1.0 is small-sample luck. The 100-query main run shows HyDE at 0.7119. Repeat run confirms reproducibility (identical nDCG with seed=42).
+
+**Key finding:** The ranking flips between datasets. HyDE wins SciFact (single-hop), Hybrid RAG wins HotpotQA (multi-hop). No single pipeline dominates across both tasks.
+
 #### SciFact Leaderboard (All 16 Pipelines, 100 queries, top-10)
 
 | # | Pipeline | nDCG@10 | Index | Per-Query | Category |
@@ -428,10 +442,10 @@ With 100 queries (vs 10 in the earlier run), we get much more reliable averages.
 
 | # | Pipeline | nDCG@10 | Index | Per-Query |
 |---|---|---|---|---|
-| **1** | **🥇 Hybrid RAG** | **0.9249** | 1.9s | 26ms |
-| **2** | **🥈 Contextual Hybrid** | **0.9233** | 2.6s | 36ms |
-| **3** | **🥉 Naive Dense RAG** | **0.9056** | 2.0s | 12ms |
-| 4 | HyDE | 0.8916 | 2.0s | 12ms |
+| **1** | **🥇 Hybrid RAG** | **0.9249** | 1.9s | 22ms |
+| **2** | **🥈 Contextual Hybrid** | **0.9233** | 2.2s | 22ms |
+| **3** | **🥉 Naive Dense RAG** | **0.9056** | 2.6s | 12ms |
+| 4 | HyDE | 0.8916 | 2.0s | 26ms |
 | 5 | BM25 + PRF | 0.8685 | 0.1s | 8ms |
 
 **The ranking flips!** HyDE wins SciFact (single-hop), Hybrid RAG wins HotpotQA (multi-hop). BM25+Dense fusion catches different reasoning hops that a single semantic similarity misses. Contextual Hybrid benefits more from context prefixes on multi-hop queries.
