@@ -8,26 +8,7 @@ Query/doc inputs may be (n_tokens, dim) or (1, n_tokens, dim).
 
 import numpy as np
 
-try:
-    import torch
-    _HAS_TORCH = True
-except Exception:
-    _HAS_TORCH = False
-
-
-def _to_numpy(x):
-    if _HAS_TORCH and hasattr(x, 'numpy'):
-        x = x.detach().cpu().numpy()
-    x = np.asarray(x, dtype=np.float32)
-    if x.ndim == 3:
-        x = x.squeeze(0)
-    return x
-
-
-def _normalize_np(x, axis=-1):
-    """L2 normalize numpy array."""
-    norms = np.linalg.norm(x, axis=axis, keepdims=True)
-    return x / np.clip(norms, 1e-8, None)
+from ..utils import to_numpy as _to_numpy, l2_normalize as _normalize_np
 
 
 def maxsim_score(query_embeddings, document_embeddings):

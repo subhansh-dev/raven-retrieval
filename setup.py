@@ -22,6 +22,7 @@ setup(
         "scikit-learn>=1.3.0",
         "rank-bm25>=0.2.2",
         "tqdm>=4.65.0",
+        "pyyaml>=6.0",
     ],
     extras_require={
         "full": [

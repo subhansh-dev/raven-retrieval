@@ -83,8 +83,17 @@ class LateChunkingEncoder:
             outputs = self.model(**tokens)
             token_embeddings = outputs.last_hidden_state.squeeze(0)  # (seq_len, hidden)
 
-        # Remove [CLS] and [SEP] tokens
-        token_embeddings = token_embeddings[1:-1]  # (seq_len-2, hidden)
+        # Remove [CLS] and [SEP] tokens, but guard against very short documents
+        # where removing both special tokens would leave nothing
+        content_len = token_embeddings.shape[0] - 2
+        if content_len <= 0:
+            # Document was so short it only had [CLS] + [SEP] (or just [CLS])
+            # Use the full sequence including special tokens as a single chunk
+            logger.warning("Document too short for late chunking, using full token sequence")
+            token_embeddings = outputs.last_hidden_state.squeeze(0)
+            content_len = token_embeddings.shape[0]
+        else:
+            token_embeddings = token_embeddings[1:-1]  # (content_len, hidden)
 
         # Split into chunks by token position
         num_tokens = token_embeddings.shape[0]
@@ -166,8 +175,12 @@ class LateChunkingRetriever:
         with torch.no_grad():
             query_output = self.encoder.model(**query_tokens)
             query_emb = query_output.last_hidden_state.squeeze(0)
-            # Pool (skip [CLS] and [SEP])
-            query_emb = query_emb[1:-1].mean(dim=0).cpu().numpy()
+            # Pool: skip [CLS] and [SEP] only if there are content tokens left
+            if query_emb.shape[0] > 2:
+                query_emb = query_emb[1:-1].mean(dim=0).cpu().numpy()
+            else:
+                # Very short query — use CLS token as fallback
+                query_emb = query_emb[0].cpu().numpy()
 
         query_emb = query_emb / np.linalg.norm(query_emb)
 

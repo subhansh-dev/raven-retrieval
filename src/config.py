@@ -204,6 +204,21 @@ class ExperimentConfig:
         if self.retrieval.top_k < 1:
             raise ValueError("top_k must be >= 1")
 
+        if self.encoder.projection_dim < 1:
+            raise ValueError("encoder.projection_dim must be >= 1")
+
+        if not (0 < self.clustering.soft_threshold < 1):
+            raise ValueError("clustering.soft_threshold must be in (0, 1)")
+
+        if self.retrieval.rrf_k < 1:
+            raise ValueError("retrieval.rrf_k must be >= 1")
+
+        if self.chunking.chunk_overlap >= self.chunking.chunk_size:
+            raise ValueError("chunking.chunk_overlap must be < chunking.chunk_size")
+
+        if self.evaluation.alpha <= 0 or self.evaluation.alpha >= 1:
+            raise ValueError("evaluation.alpha must be in (0, 1)")
+
         return True
 
 

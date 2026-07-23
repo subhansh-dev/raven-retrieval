@@ -15,13 +15,15 @@ class ReferenceCrossValidator:
         all_rankings = {}
         self.our_encoder.eval()
         with torch.no_grad():
-            doc_embeddings = []
-            for text in self.corpus_texts:
-                emb = self.our_encoder.encode_document(text)
-                doc_embeddings.append(emb.cpu().numpy())
+            # Batched corpus encoding — much faster than one-at-a-time
+            doc_embeddings = self.our_encoder.encode_documents(
+                self.corpus_texts, max_length=256, batch_size=32, show_progress=True
+            )
             for qid, query in queries.items():
                 query_emb = self.our_encoder.encode_query(query)
                 query_emb_np = query_emb.cpu().numpy()
+                if query_emb_np.ndim == 3:
+                    query_emb_np = query_emb_np.squeeze(0)
                 ranked = brute_force_rank(query_emb_np, doc_embeddings, top_k=top_k)
                 all_rankings[qid] = [self.corpus_ids[idx] for idx, _ in ranked]
         return all_rankings

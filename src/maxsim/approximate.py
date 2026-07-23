@@ -10,25 +10,12 @@ Python loops (the old implementation was ~256x slower than necessary).
 
 import numpy as np
 
-try:
-    import torch
-    _HAS_TORCH = True
-except Exception:
-    _HAS_TORCH = False
+from ..utils import to_numpy as _to_numpy
 
 try:
     import faiss
 except ImportError:
     faiss = None
-
-
-def _to_numpy(x):
-    if _HAS_TORCH and hasattr(x, 'numpy'):
-        x = x.detach().cpu().numpy()
-    x = np.asarray(x, dtype=np.float32)
-    if x.ndim == 3:
-        x = x.squeeze(0)
-    return x
 
 
 def _assign_centroids(centroids, tokens):

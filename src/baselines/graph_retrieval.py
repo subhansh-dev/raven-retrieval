@@ -177,7 +177,7 @@ class GraphRetriever:
     standard retrieval is better.
     """
 
-    def __init__(self, base_retriever, chunk_size=200, chunk_overlap=50,
+    def __init__(self, base_retriever=None, chunk_size=200, chunk_overlap=50,
                  similarity_threshold=0.5):
         self.base_retriever = base_retriever
         self.chunk_size = chunk_size
@@ -231,6 +231,29 @@ class GraphRetriever:
 
         return self.graph
 
+    def _embedding_fallback_retrieve(self, query, top_k=10):
+        """Fallback retrieval using graph node embeddings directly (no base_retriever)."""
+        from sentence_transformers import SentenceTransformer
+        model = SentenceTransformer("all-MiniLM-L6-v2")
+        query_emb = model.encode([query])[0]
+        query_emb = query_emb / np.linalg.norm(query_emb)
+
+        scored = []
+        for nid, node_data in self.graph.nodes.items():
+            emb = node_data["embedding"]
+            emb_norm = emb / np.linalg.norm(emb)
+            sim = float(np.dot(query_emb, emb_norm))
+            doc_id = nid.split("::")[0]
+            scored.append((doc_id, sim))
+
+        # Deduplicate by doc_id (keep highest score)
+        doc_scores = {}
+        for doc_id, score in scored:
+            if doc_id not in doc_scores or score > doc_scores[doc_id]:
+                doc_scores[doc_id] = score
+
+        return sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+
     def retrieve(self, query, top_k=10, strategy="hybrid"):
         """Retrieve using graph-enhanced retrieval.
 
@@ -240,10 +263,17 @@ class GraphRetriever:
         - "hybrid": combine standard + graph results
         """
         if strategy == "standard":
+            if self.base_retriever is None:
+                raise ValueError("GraphRetriever: strategy='standard' requires a base_retriever. "
+                                 "Pass one at init or use strategy='graph' or 'hybrid'.")
             return self.base_retriever.retrieve(query, top_k=top_k)
 
-        # Standard retrieval first
-        standard_results = self.base_retriever.retrieve(query, top_k=top_k)
+        # Standard retrieval first (needed for graph and hybrid strategies)
+        if self.base_retriever is not None:
+            standard_results = self.base_retriever.retrieve(query, top_k=top_k)
+        else:
+            # Without base_retriever, use a simple embedding-based fallback
+            standard_results = self._embedding_fallback_retrieve(query, top_k=top_k)
 
         if strategy == "graph" and self._indexed:
             # Find which communities the top results belong to

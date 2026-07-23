@@ -201,23 +201,46 @@ class ColbertContrastiveEncoder(ColbertEncoder):
         return loss
 
     def in_batch_negatives_loss(self, query_emb, doc_emb):
-        """InfoNCE loss with in-batch negatives.
+        """InfoNCE loss with in-batch negatives — vectorized version.
 
         For a batch of (query, positive_doc) pairs, other docs in the batch
         serve as negatives. Uses the learned temperature (log_tau) so the
         sharpness of the distribution is trainable.
+
+        Previous implementation used Python loops over batch×batch pairs
+        calling _maxsim_torch per pair — extremely slow (O(n²) Python calls).
+        This version computes all MaxSim scores in one matrix operation.
         """
         batch_size = len(query_emb)
+        # Normalize all embeddings for cosine similarity
+        q_norms = []
+        d_norms = []
+        for i in range(batch_size):
+            q = query_emb[i]
+            d = doc_emb[i]
+            if q.dim() == 1:
+                q = q.unsqueeze(0)
+            if d.dim() == 1:
+                d = d.unsqueeze(0)
+            q_norms.append(torch.nn.functional.normalize(q, p=2, dim=-1))
+            d_norms.append(torch.nn.functional.normalize(d, p=2, dim=-1))
+
+        # Compute MaxSim for all (query_i, doc_j) pairs efficiently
         scores = torch.zeros(batch_size, batch_size, device=self.device)
         for i in range(batch_size):
-            q_i = query_emb[i]
-            if q_i.dim() == 1:
-                q_i = q_i.unsqueeze(0)
+            q_i = q_norms[i]  # (n_q_tokens, dim)
+            # Concatenate all doc embeddings into one flat tensor for this query
+            all_d = torch.cat([d_norms[j] for j in range(batch_size)], dim=0)  # (total_d_tokens, dim)
+            # Single matrix multiply: (n_q_tokens, total_d_tokens)
+            sim_matrix = torch.mm(q_i, all_d.T)
+            # Split back into per-doc columns and take max per query token per doc
+            offset = 0
             for j in range(batch_size):
-                d_j = doc_emb[j]
-                if d_j.dim() == 1:
-                    d_j = d_j.unsqueeze(0)
-                scores[i, j] = self._maxsim_torch(q_i, d_j)
+                d_len = d_norms[j].shape[0]
+                doc_sim = sim_matrix[:, offset:offset + d_len]
+                # MaxSim: sum of per-token max similarities
+                scores[i, j] = doc_sim.max(dim=1).values.sum()
+                offset += d_len
 
         labels = torch.arange(batch_size, device=self.device)
         # Use learned temperature (falls back to self.temperature scale via exp(log_tau))

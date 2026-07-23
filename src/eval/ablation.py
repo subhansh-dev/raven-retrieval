@@ -41,19 +41,27 @@ class AblationRunner:
         self.corpus = corpus
         self.all_results = {}
 
-    def run_naive_rag(self, retriever, top_k=10):
+    def run_retriever(self, retriever, top_k=10):
+        """Run any retriever and return BEIR-format results dict.
+
+        This replaces the identical run_naive_rag and run_hybrid_rag methods.
+        They were doing the exact same thing — the name was misleading
+        (the pipeline type depends on the retriever passed in, not the method).
+        """
         results = {}
         for qid, query in self.queries.items():
             retrieved = retriever.retrieve(query, top_k=top_k)
             results[qid] = {doc_id: score for doc_id, score in retrieved}
         return results
 
+    # Aliases for backward compatibility
+    def run_naive_rag(self, retriever, top_k=10):
+        """Alias for run_retriever (backward compatibility)."""
+        return self.run_retriever(retriever, top_k=top_k)
+
     def run_hybrid_rag(self, retriever, top_k=10):
-        results = {}
-        for qid, query in self.queries.items():
-            retrieved = retriever.retrieve(query, top_k=top_k)
-            results[qid] = {doc_id: score for doc_id, score in retrieved}
-        return results
+        """Alias for run_retriever (backward compatibility)."""
+        return self.run_retriever(retriever, top_k=top_k)
 
     def run_late_interaction_flat(self, encoder, corpus_embeddings_list, corpus_ids, top_k=10):
         from ..maxsim.brute_force import brute_force_rank

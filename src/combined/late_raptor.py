@@ -23,7 +23,7 @@ from ..raptor.chunker import TextChunker
 from ..raptor.clustering import global_local_cluster
 from ..raptor.tree import TreeNode, RaptorTree
 from ..raptor.summarizer import LLMSummarizer
-from ..maxsim.brute_force import maxsim_score
+from ..maxsim.brute_force import maxsim_score, pack_doc_embeddings, brute_force_rank_fast
 
 logger = logging.getLogger(__name__)
 
@@ -132,16 +132,25 @@ class LateInteractionRaptor:
         return query_embs_np
 
     def retrieve_collapsed(self, query_text, top_k=10):
-        """Score every node in the tree with MaxSim, take top-k."""
+        """Score every node in the tree with MaxSim, take top-k.
+
+        Uses batched scoring (brute_force_rank_fast) instead of calling
+        maxsim_score per node — much faster for trees with many nodes.
+        """
         if self.tree is None:
             raise ValueError("Tree not built. Call build() first.")
         query_embs_np = self._encode_query(query_text)
-        scored = []
-        for node in self.tree.get_all_nodes_flat():
-            score = maxsim_score(query_embs_np, node.embeddings)
-            scored.append((node.node_id, score))
-        scored.sort(key=lambda x: x[1], reverse=True)
-        return scored[:top_k]
+
+        # Pack all node embeddings for fast batched scoring
+        all_nodes = self.tree.get_all_nodes_flat()
+        node_embs = [n.embeddings for n in all_nodes]
+        flat_embs, doc_lengths = pack_doc_embeddings(node_embs)
+
+        ranked = brute_force_rank_fast(query_embs_np, flat_embs, doc_lengths, top_k=top_k)
+
+        # Map back from index to node_id
+        scored = [(all_nodes[idx].node_id, score) for idx, score in ranked]
+        return scored
 
     def retrieve_traversal(self, query_text, top_k=10):
         """Top-down traversal: score roots, take top-k, descend to children."""

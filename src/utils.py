@@ -110,6 +110,26 @@ def l2_normalize(matrix, axis=-1):
     return matrix / np.clip(norms, 1e-8, None)
 
 
+def to_numpy(x):
+    """Convert torch tensors or array-like objects to numpy float32 array.
+
+    Handles: torch tensors (detach + cpu), numpy arrays, lists.
+    Squeezes leading batch dimension if present (3D → 2D).
+    This is the canonical version — used by maxsim modules instead of
+    their own local copies.
+    """
+    try:
+        import torch
+        if hasattr(x, 'detach') and hasattr(x, 'cpu'):
+            x = x.detach().cpu().numpy()
+    except ImportError:
+        pass
+    x = np.asarray(x, dtype=np.float32)
+    if x.ndim == 3:
+        x = x.squeeze(0)
+    return x
+
+
 def masked_mean_pool(token_embeddings, mask):
     """Mean-pool token embeddings respecting the attention mask.
 
